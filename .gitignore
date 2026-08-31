@@ -1,0 +1,6 @@
+# データ生成スクリプト用の依存（アプリの動作には不要）
+tools/node_modules/
+tools/package-lock.json
+
+# リポジトリ直下の .gitignore が README.md を除外しているので、ここだけ元に戻す
+!README.md

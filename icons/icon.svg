@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="世界地図クイズ">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1d4ed8"/>
+      <stop offset="1" stop-color="#3884e8"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="113" fill="url(#bg)"/>
+  <g transform="translate(256 256)">
+    <circle r="154" fill="#f8fbff" stroke="#1d4ed8" stroke-width="16"/>
+    <g fill="none" stroke="#93c5fd" stroke-width="12">
+      <ellipse rx="65" ry="154"/>
+      <ellipse rx="123" ry="154"/>
+      <path d="M0 -154V154"/>
+      <path d="M-146 -85H146M-146 85H146"/>
+    </g>
+    <path d="M-152 0H152" stroke="#1d4ed8" stroke-width="14"/>
+  </g>
+</svg>

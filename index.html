@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>世界地図クイズ｜地図と国旗で国名をおぼえる</title>
+<meta name="description" content="世界の地図と国旗から国名を当てるクイズ。日本語と英語、大州べつの出題に対応。中学の地理の勉強に。">
+<meta name="theme-color" content="#1d4ed8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b1220" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark">
+
+<!-- iPhone のホーム画面に置いたときアプリのように開く -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="世界地図クイズ">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ================= ホーム ================= -->
+<section class="screen is-active" id="screen-home">
+  <header class="hero">
+    <div class="hero-globe" aria-hidden="true">🌏</div>
+    <h1>世界地図クイズ</h1>
+    <p class="hero-sub">地図と国旗から国名をおぼえる</p>
+  </header>
+
+  <main class="settings" id="settings">
+    <div class="field">
+      <h2 class="field-label">出題</h2>
+      <div class="opts" role="radiogroup" aria-label="出題" data-key="mode">
+        <button type="button" role="radio" data-value="map">🗺️ 地図から</button>
+        <button type="button" role="radio" data-value="flag">🚩 国旗から</button>
+        <button type="button" role="radio" data-value="mix">🔀 ミックス</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <h2 class="field-label">出題する地域</h2>
+      <div class="opts opts-wrap" role="radiogroup" aria-label="出題する地域" data-key="region" id="opts-region"></div>
+    </div>
+
+    <div class="field">
+      <h2 class="field-label">レベル</h2>
+      <div class="opts" role="radiogroup" aria-label="レベル" data-key="level">
+        <button type="button" role="radio" data-value="1">基本<small id="lv1-count"></small></button>
+        <button type="button" role="radio" data-value="2">標準<small id="lv2-count"></small></button>
+        <button type="button" role="radio" data-value="3">すべて<small id="lv3-count"></small></button>
+      </div>
+    </div>
+
+    <div class="field">
+      <h2 class="field-label">国名の表記</h2>
+      <div class="opts" role="radiogroup" aria-label="国名の表記" data-key="lang">
+        <button type="button" role="radio" data-value="ja">日本語</button>
+        <button type="button" role="radio" data-value="en">English</button>
+        <button type="button" role="radio" data-value="both">日本語＋英語</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <h2 class="field-label">問題数</h2>
+      <div class="opts" role="radiogroup" aria-label="問題数" data-key="count">
+        <button type="button" role="radio" data-value="10">10問</button>
+        <button type="button" role="radio" data-value="20">20問</button>
+        <button type="button" role="radio" data-value="30">30問</button>
+      </div>
+    </div>
+
+    <p class="pool-note" id="pool-note"></p>
+
+    <button type="button" class="btn btn-primary btn-start" id="btn-start">スタート</button>
+    <button type="button" class="btn btn-ghost" id="btn-list">📖 国いちらんを見る</button>
+
+    <div class="record" id="record" hidden>
+      <h2 class="field-label">この設定の記録</h2>
+      <p id="record-body"></p>
+    </div>
+
+    <footer class="foot">
+      <p>国境データ: Natural Earth（パブリックドメイン）／国名データ: world-countries（ODbL）</p>
+      <p>出題対象は国連加盟の194か国です。</p>
+    </footer>
+  </main>
+</section>
+
+<!-- ================= クイズ ================= -->
+<section class="screen" id="screen-quiz">
+  <header class="qbar">
+    <button type="button" class="icon-btn" id="btn-quit" aria-label="やめる">✕</button>
+    <div class="qprogress">
+      <div class="qprogress-bar"><span id="progress-fill"></span></div>
+      <div class="qprogress-text"><span id="q-index">1 / 10</span><span id="q-score">◯ 0</span></div>
+    </div>
+  </header>
+
+  <main class="qmain">
+    <p class="prompt" id="prompt">この国はどこ？</p>
+
+    <div class="stage" id="stage">
+      <div class="stage-map" id="stage-map" hidden>
+        <div class="map-frame">
+          <svg id="map" class="wmap" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet" aria-label="地図"></svg>
+          <div class="map-tools">
+            <button type="button" class="chip" id="btn-view">🌏 世界で見る</button>
+            <button type="button" class="chip" id="btn-reset" hidden>⤢ 戻す</button>
+          </div>
+        </div>
+      </div>
+      <div class="stage-flag" id="stage-flag" hidden>
+        <div class="flag" id="flag"></div>
+      </div>
+    </div>
+
+    <div class="choices" id="choices"></div>
+  </main>
+
+  <div class="feedback" id="feedback" hidden>
+    <div class="feedback-card">
+      <div class="feedback-mark" id="fb-mark">◯</div>
+      <p class="feedback-name" id="fb-name"></p>
+      <p class="feedback-sub" id="fb-sub"></p>
+      <button type="button" class="btn btn-primary" id="btn-next">次へ</button>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 結果 ================= -->
+<section class="screen" id="screen-result">
+  <main class="result">
+    <div class="score-ring" id="score-ring">
+      <span class="score-pct" id="score-pct">0%</span>
+      <span class="score-raw" id="score-raw">0 / 0</span>
+    </div>
+    <p class="result-msg" id="result-msg"></p>
+
+    <div class="wrong-box" id="wrong-box" hidden>
+      <h2 class="field-label">まちがえた国</h2>
+      <ul class="wrong-list" id="wrong-list"></ul>
+    </div>
+
+    <button type="button" class="btn btn-primary" id="btn-again">もう一度</button>
+    <button type="button" class="btn btn-secondary" id="btn-review" hidden>まちがいだけ復習</button>
+    <button type="button" class="btn btn-ghost" id="btn-home">設定にもどる</button>
+  </main>
+</section>
+
+<!-- ================= 国いちらん ================= -->
+<section class="screen" id="screen-list">
+  <header class="qbar qbar-plain">
+    <button type="button" class="icon-btn" id="btn-list-close" aria-label="閉じる">✕</button>
+    <h2 class="list-title" id="list-title">国いちらん</h2>
+  </header>
+  <main class="list-main">
+    <input type="search" id="list-search" class="search" placeholder="国名でさがす（日本語 / English）" autocomplete="off">
+    <ul class="country-list" id="country-list"></ul>
+  </main>
+</section>
+
+<script src="data/countries.js"></script>
+<script src="data/geo.js"></script>
+<script src="js/map.js"></script>
+<script src="js/quiz.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

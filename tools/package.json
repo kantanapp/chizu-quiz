@@ -1,0 +1,14 @@
+{
+  "name": "chizu-quiz-tools",
+  "private": true,
+  "type": "module",
+  "description": "地図クイズのデータ生成スクリプト（アプリ本体の実行には不要）",
+  "scripts": {
+    "build": "node build-data.mjs"
+  },
+  "dependencies": {
+    "topojson-client": "^3.1.0",
+    "world-atlas": "^2.0.2",
+    "world-countries": "^5.0.0"
+  }
+}
