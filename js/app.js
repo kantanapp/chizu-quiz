@@ -10,6 +10,9 @@
   var DEFAULTS = { mode: 'map', region: 'world', level: 1, lang: 'ja', count: 10 };
 
   var settings = load(STORE_SETTINGS, DEFAULTS);
+  /* 地図の見え方。押すたびに 寄り → 大州 → 世界 と切り替わる */
+  var VIEW_STEPS = ['fit', 'region', 'world'];
+
   var state = null;      // 進行中のクイズ
   var gestures = null;   // 地図の指操作
 
@@ -155,7 +158,7 @@
       alert('この条件では問題が作れません。範囲かレベルを変えてください。');
       return;
     }
-    state = { questions: questions, i: 0, correct: 0, wrong: [], answered: false, worldView: false };
+    state = { questions: questions, i: 0, correct: 0, wrong: [], answered: false, viewStep: 0 };
     show('screen-quiz');
     renderQuestion();
   }
@@ -165,7 +168,7 @@
   function renderQuestion() {
     var q = currentQ();
     state.answered = false;
-    state.worldView = false;
+    state.viewStep = 0;
 
     $('q-index').textContent = (state.i + 1) + ' / ' + state.questions.length;
     $('q-score').textContent = '◯ ' + state.correct;
@@ -192,15 +195,22 @@
   function drawMap() {
     var q = currentQ();
     var svg = $('map');
-    var view = state.worldView ? 'world' : WorldMap.viewForRegion(q.answer.region);
+    var step = VIEW_STEPS[state.viewStep];
+    var view = step === 'fit'    ? WorldMap.fitView(q.answer.n3)
+             : step === 'region' ? WorldMap.regionView(q.answer.region)
+             :                     WorldMap.worldView();
     WorldMap.render(svg, view, q.answer.n3, $('stage-map'));
     if (!gestures) {
       gestures = WorldMap.attachGestures(svg, function () { return svg.querySelector('.c-layer'); });
     }
     gestures.reset();
-    $('btn-view').textContent = state.worldView
-      ? '🔍 ' + regionLabel(q.answer.region) + 'で見る'
-      : '🌏 世界で見る';
+
+    /* ボタンには「次に何が見えるか」を出す */
+    var next = VIEW_STEPS[(state.viewStep + 1) % VIEW_STEPS.length];
+    $('btn-view').textContent =
+      next === 'fit'    ? '🔍 その国に寄る' :
+      next === 'region' ? '🗺️ ' + regionLabel(q.answer.region) + '全体' :
+                          '🌏 世界地図';
     $('btn-reset').hidden = true;
   }
 
@@ -370,7 +380,7 @@
     });
 
     $('btn-view').addEventListener('click', function () {
-      state.worldView = !state.worldView;
+      state.viewStep = (state.viewStep + 1) % VIEW_STEPS.length;
       drawMap();
     });
     $('btn-reset').addEventListener('click', function () { if (gestures) gestures.reset(); });

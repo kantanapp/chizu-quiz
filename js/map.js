@@ -28,8 +28,33 @@
      表示範囲に入るものだけ描く。 */
   var OFFSETS = [-360, 0, 360];
 
-  /* 表示範囲を、余白が出すぎない程度だけ広げる上限 */
+  /* 表示範囲を画面の縦横比に近づけるとき、広げすぎない上限 */
   var MAX_STRETCH = 1.6;
+
+  /* 「その国に寄った表示」の決め方。
+     国の大きさの FIT_K 倍を一辺とする四角を切り出す。
+     小さい国は寄りすぎ、大きい国は引きすぎになるので上下で止める。 */
+  var FIT_K = 5, FIT_MIN = 38, FIT_MAX = 190;
+
+  /* 表示範囲は [x0, y0, x1, y1]（x は経度、y は projY した値）で持つ */
+  function toView(box) {
+    return [box[0], projY(box[3]), box[2], projY(box[1])];
+  }
+
+  function worldView() { return toView(VIEWS.world); }
+
+  function regionView(region) { return toView(VIEWS[region] || VIEWS.world); }
+
+  function fitView(n3) {
+    var shape = global.GEO[n3];
+    if (!shape) return worldView();
+    var b = shape.b;
+    var y0 = projY(b[3]), y1 = projY(b[1]);
+    var span = Math.max(b[2] - b[0], y1 - y0) * FIT_K;
+    span = Math.max(FIT_MIN, Math.min(FIT_MAX, span));
+    var cx = (b[0] + b[2]) / 2, cy = (y0 + y1) / 2;
+    return [cx - span / 2, cy - span / 2, cx + span / 2, cy + span / 2];
+  }
 
   var pathCache = Object.create(null);
 
@@ -52,9 +77,9 @@
   }
 
   /** その図形が表示範囲と重なるか */
-  function intersects(b, box, offset) {
-    return b[2] + offset >= box[0] && b[0] + offset <= box[2] &&
-           b[3] >= box[1] && b[1] <= box[3];
+  function intersects(b, view, offset) {
+    return b[2] + offset >= view[0] && b[0] + offset <= view[2] &&
+           projY(b[1]) >= view[1] && projY(b[3]) <= view[3];
   }
 
   /** 図形の中心（描画座標）。小さい国に印をつけるのに使う。 */
@@ -71,31 +96,25 @@
   /**
    * 地図を描く。
    * @param {SVGElement} svg
-   * @param {string} viewName  VIEWS のキー
+   * @param {number[]} view  表示範囲 [x0, y0, x1, y1]
    * @param {string|null} targetN3  強調表示する国（ccn3）
    * @param {Element} boxEl  使える表示領域（この中に収まる大きさで描く）
    */
-  function render(svg, viewName, targetN3, boxEl) {
-    var box = VIEWS[viewName] || VIEWS.world;
-
-    var vx = box[0];
-    var vy = projY(box[3]);
-    var vw = box[2] - box[0];
-    var vh = projY(box[1]) - vy;
+  function render(svg, view, targetN3, boxEl) {
+    var vx = view[0], vy = view[1];
+    var vw = view[2] - view[0], vh = view[3] - view[1];
 
     /* 画面の縦横比に近づける。広げすぎると地域が小さくなるので
        MAX_STRETCH までにとどめる。 */
     var rect = (boxEl || svg.parentNode).getBoundingClientRect();
     var boxW = rect.width || 320, boxH = rect.height || 240;
     var aspect = boxW / boxH;
-    if (aspect > 0) {
-      if (vw / vh < aspect) {
-        var nw = Math.min(vh * aspect, vw * MAX_STRETCH);
-        vx -= (nw - vw) / 2; vw = nw;
-      } else {
-        var nh = Math.min(vw / aspect, vh * MAX_STRETCH);
-        vy -= (nh - vh) / 2; vh = nh;
-      }
+    if (vw / vh < aspect) {
+      var nw = Math.min(vh * aspect, vw * MAX_STRETCH);
+      vx -= (nw - vw) / 2; vw = nw;
+    } else {
+      var nh = Math.min(vw / aspect, vh * MAX_STRETCH);
+      vy -= (nh - vh) / 2; vh = nh;
     }
     svg.setAttribute('viewBox', [vx, vy, vw, vh].join(' '));
 
@@ -104,19 +123,17 @@
     svg.style.width = Math.round(vw * fit) + 'px';
     svg.style.height = Math.round(vh * fit) + 'px';
 
-    /* 重なり判定は経度だけ広げた範囲で行う */
-    var lonBox = [vx, box[1] - 90, vx + vw, box[3] + 90];
-
+    var shown = [vx, vy, vx + vw, vy + vh];
     var land = '', target = '', mark = '';
     for (var n3 in global.GEO) {
       var shape = global.GEO[n3];
       for (var o = 0; o < OFFSETS.length; o++) {
         var off = OFFSETS[o];
-        if (!intersects(shape.b, lonBox, off)) continue;
+        if (!intersects(shape.b, shown, off)) continue;
         var d = pathFor(n3, off);
         if (!d) continue;
         if (n3 === targetN3) target += '<path class="c-target" d="' + d + '"/>';
-        else land += '<path d="' + d + '"/>';
+        else land += '<path class="g' + (shape.c || 0) + '" d="' + d + '"/>';
       }
     }
 
@@ -124,7 +141,7 @@
     if (targetN3 && global.GEO[targetN3]) {
       var tb = global.GEO[targetN3].b;
       for (var q = 0; q < OFFSETS.length; q++) {
-        if (!intersects(tb, lonBox, OFFSETS[q])) continue;
+        if (!intersects(tb, shown, OFFSETS[q])) continue;
         var c = centerOf(targetN3, OFFSETS[q]);
         if (c.w < vw * 0.07 && c.h < vh * 0.07) {
           var r = Math.max(vw, vh) * 0.04;
@@ -140,11 +157,6 @@
         '<g class="c-land">' + land + '</g>' + target + mark +
       '</g>';
     return svg.querySelector('.c-layer');
-  }
-
-  /** その国を含む大州の表示名 */
-  function viewForRegion(region) {
-    return VIEWS[region] ? region : 'world';
   }
 
   /* ---------------------------------------------------------------- *
@@ -250,8 +262,9 @@
 
   global.WorldMap = {
     render: render,
-    viewForRegion: viewForRegion,
-    attachGestures: attachGestures,
-    VIEWS: VIEWS
+    fitView: fitView,
+    regionView: regionView,
+    worldView: worldView,
+    attachGestures: attachGestures
   };
 })(window);
