@@ -138,7 +138,7 @@
       if (jn < settings.jcount) note += ' 全部で ' + jn + '問になります。';
       if (settings.jmode === 'jwrite' || settings.jmode === 'mix') {
         note += settings.guide === 'on'
-          ? ' 漢字はお手本をなぞって書きます。'
+          ? ' 漢字は薄いお手本の上に、自分の字で書きます。'
           : ' 漢字はお手本なしで書きます。';
       }
       $('pool-note').textContent = note;
@@ -213,8 +213,9 @@
     $('choices').hidden = write;
     $('stage').classList.toggle('is-compact', write);
 
-    /* 選択肢を先に並べてから地図を描く（残りの高さから大きさを決めるため） */
-    if (!write) renderChoices(q);
+    /* 下に来るもの（選択肢／書く欄）を先に置いてから地図を描く。
+       地図は残りの高さから大きさを決めるので、順番を逆にすると大きく描きすぎる。 */
+    if (write) startWriting(q); else renderChoices(q);
 
     if (q.kind === 'flag') {
       $('prompt').textContent = 'この国旗はどこの国？';
@@ -231,8 +232,6 @@
       $('stage-flag').hidden = true;
       drawMap();
     }
-
-    if (write) startWriting(q);
   }
 
   function drawMap() {
@@ -347,17 +346,23 @@
    * 漢字を書く問題
    * ---------------------------------------------------------------- */
   function startWriting(q) {
+    /* お手本が出ているときは、ヒント（お手本をひと目見せる）は要らない */
+    $('btn-k-hint').hidden = settings.guide === 'on';
     pad = KanjiPad.create({
-      strip: $('k-strip'),
       pad: $('k-pad'),
       chars: q.answer.name.split(''),
       suffix: q.answer.suffix,
-      guide: settings.guide === 'on',
-      onComplete: function (r) {
-        var note = r.hints ? 'ヒント ' + r.hints + '回' : '';
-        finishQuestion(true, note);
-      }
+      guide: settings.guide === 'on'
     });
+  }
+
+  /** 書き取りの答え合わせで、フィードバックに足す一言 */
+  function writeNote(r) {
+    if (!r.ok) {
+      if (r.matched < r.total) return r.total + '画のうち ' + r.matched + '画';
+      return 'よけいな線が ' + r.extras + '本';
+    }
+    return r.hints ? 'ヒント ' + r.hints + '回' : '';
   }
 
   /* ---------------------------------------------------------------- *
@@ -508,15 +513,13 @@
       if (gestures) $('btn-reset').hidden = !gestures.isZoomed();
     });
 
+    $('btn-k-undo').addEventListener('click', function () { if (pad) pad.undo(); });
     $('btn-k-clear').addEventListener('click', function () { if (pad) pad.clear(); });
     $('btn-k-hint').addEventListener('click', function () { if (pad) pad.hint(); });
     $('btn-k-answer').addEventListener('click', function () {
       if (!pad || state.answered) return;
       var r = pad.submit();
-      var note = r.ok
-        ? (r.hints ? 'ヒント ' + r.hints + '回' : '')
-        : (r.written ? r.total + '画のうち ' + r.written + '画' : '');
-      finishQuestion(r.ok, note);
+      finishQuestion(r.ok, writeNote(r));
     });
 
     /* 画面の向きが変わったら地図を描き直す */

@@ -5,7 +5,8 @@
   "description": "地図クイズのデータ生成スクリプト（アプリ本体の実行には不要）",
   "scripts": {
     "build": "node build-data.mjs && node build-japan.mjs && node make-icons.mjs",
-    "build:japan": "node build-japan.mjs"
+    "build:japan": "node build-japan.mjs",
+    "check:kanji": "node check-kanji.mjs"
   },
   "dependencies": {
     "topojson-client": "^3.1.0",

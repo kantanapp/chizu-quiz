@@ -1,6 +1,6 @@
 /* オフラインでも遊べるようにアプリ本体をキャッシュする。
    ファイルを更新したら CACHE のバージョン番号を上げること。 */
-var CACHE = 'chizu-quiz-v5';
+var CACHE = 'chizu-quiz-v6';
 
 var ASSETS = [
   './',
