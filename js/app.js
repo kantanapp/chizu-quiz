@@ -522,6 +522,15 @@
       finishQuestion(r.ok, writeNote(r));
     });
 
+    /* iPhone は viewport の user-scalable=no を聞かないので、2本指の拡大と
+       とんとん2回たたく拡大がそのまま効いてしまう。書いている最中にこれが起きると、
+       画面ごとふくらんでマスの位置がずれ、字が書けなくなる。ここで止める。
+       地図の拡大は指の位置を自分で見ていて、この iPhone 独自のイベントは使っていないので、
+       止めても地図の操作には影響しない。 */
+    ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (t) {
+      document.addEventListener(t, function (e) { e.preventDefault(); }, { passive: false });
+    });
+
     /* 画面の向きが変わったら地図を描き直す */
     window.addEventListener('resize', function () {
       if (!state || !$('screen-quiz').classList.contains('is-active')) return;

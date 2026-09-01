@@ -58,10 +58,23 @@
 /* クラス側の display に負けないようにする（.feedback などは display:flex のため） */
 [hidden] { display: none !important; }
 
+/* 画面ぜんぶを、紙のように動かない板にする。
+   iPhone は overflow:hidden だけでは、指でひっぱると紙全体がゆれて（ラバーバンド）、
+   上のアドレスバーが出たり引っこんだりする。書いている最中にこれが起きると、
+   マスの位置が指の下でずれて、字が書けなくなる。body を position:fixed で
+   viewport に釘づけにすると、ひっぱっても紙そのものは動かなくなる。
+   画面の中身をスクロールさせているのは .screen（ホームと結果）なので、これで困らない。 */
 html, body {
   margin: 0;
   height: 100%;
+  overflow: hidden;
   overscroll-behavior: none;
+}
+body {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
 }
 
 body {
@@ -386,6 +399,10 @@ body {
   flex-direction: column;
   gap: 10px;
   margin-bottom: 10px;
+  /* 書く欄まわりは、指でさわっても画面をスクロール・拡大させない。
+     マスの外（マスとマスのすきま、道具のならび）から書きはじめても
+     指の動きが「ページを動かす操作」に取られないように、欄ごと止める。 */
+  touch-action: none;
 }
 
 /* いちらん・結果でつかう小さな文字 */
