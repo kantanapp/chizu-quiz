@@ -436,6 +436,12 @@
       }
       svg.addEventListener('pointerup', up);
       svg.addEventListener('pointercancel', up);
+
+      /* 長押しのメニューと、線をつかんで運ぶ操作を止める。
+         書いているとちゅうに出てくると、その指の動きが線にならなくなるため。 */
+      svg.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+      svg.addEventListener('dragstart', function (e) { e.preventDefault(); });
+      svg.addEventListener('selectstart', function (e) { e.preventDefault(); });
     }
 
     function report() {

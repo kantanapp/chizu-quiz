@@ -73,6 +73,19 @@ body {
   line-height: 1.6;
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
+  /* 指で書いているとちゅうに、長押しの「コピー／調べる」や文字選択の虫めがねが
+     出てきて邪魔をするので、画面ぜんぶで文字選択と長押しメニューを止める。
+     読ませる画面ではなく、押す・書く画面なので、選択できなくて困るのは検索欄だけ。 */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* 検索欄だけは、文字を選べないと不便なので元にもどす */
+.search {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }
 
 /* ---------- 画面の切り替え ---------- */
@@ -391,6 +404,7 @@ body {
 }
 .k-pad {
   flex: 1 1 auto;
+  -webkit-user-drag: none;
   min-width: 0;
   width: 100%;
   height: auto;
