@@ -121,9 +121,12 @@ body {
 }
 
 .opts { display: flex; gap: 8px; }
-/* 地域は 3 列。「世界ぜんぶ」だけ横いっぱいに置く。 */
+/* 地域・地方は 3 列。「世界ぜんぶ」「全国」だけ横いっぱいに置く。 */
 .opts-wrap { display: grid; grid-template-columns: repeat(3, 1fr); }
-.opts-wrap button:first-child { grid-column: 1 / -1; }
+#opts-region button:first-child,
+#opts-jregion button:first-child { grid-column: 1 / -1; }
+/* 4つ並ぶ出題の行は 2 列にして、文字が折り返さないようにする */
+.opts-2col { grid-template-columns: 1fr 1fr; }
 
 .opts button {
   flex: 1 1 0;
