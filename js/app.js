@@ -358,11 +358,11 @@
 
   /** 書き取りの答え合わせで、フィードバックに足す一言 */
   function writeNote(r) {
-    if (!r.ok) {
-      if (r.matched < r.total) return r.total + '画のうち ' + r.matched + '画';
-      return 'よけいな線が ' + r.extras + '本';
-    }
-    return r.hints ? 'ヒント ' + r.hints + '回' : '';
+    if (r.ok) return r.hints ? 'ヒント ' + r.hints + '回' : '';
+    /* どの文字がちがったかを出す。ぜんぶちがうなら、わざわざ言わない。 */
+    var bad = r.chars.filter(function (c) { return !c.ok; });
+    if (!bad.length || bad.length === r.chars.length) return '';
+    return bad.map(function (c) { return (c.ci + 1) + '文字め'; }).join('・') + 'がちがいます';
   }
 
   /* ---------------------------------------------------------------- *
