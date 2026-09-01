@@ -1,16 +1,20 @@
 /* オフラインでも遊べるようにアプリ本体をキャッシュする。
    ファイルを更新したら CACHE のバージョン番号を上げること。 */
-var CACHE = 'chizu-quiz-v3';
+var CACHE = 'chizu-quiz-v4';
 
 var ASSETS = [
   './',
   'index.html',
   'css/style.css',
   'js/map.js',
+  'js/kanji.js',
   'js/quiz.js',
   'js/app.js',
   'data/countries.js',
   'data/geo.js',
+  'data/prefectures.js',
+  'data/japan-geo.js',
+  'data/kanji.js',
   'manifest.webmanifest',
   'icons/icon.svg',
   'icons/icon-192.png',

@@ -1,19 +1,26 @@
-/* 地図の描画（ミラー図法・SVG）
-   世界地図の見た目を、教科書の地図帳に近いミラー円筒図法でそろえている。 */
+/* 地図の描画（SVG）
+   世界地図と日本地図の2種類を「アトラス」として同じ仕組みで扱う。
+   ・世界 … データは経度緯度。ミラー図法（教科書の地図帳に近い見た目）で投影する。
+   ・日本 … jpn-atlas の座標がすでに平面なので、投影せずそのまま描く。 */
 (function (global) {
   'use strict';
 
   var DEG = Math.PI / 180;
 
-  /** 緯度 → SVG の y（下が正）。ミラー図法。 */
-  function projY(lat) {
+  /** 緯度 → 描画座標の y（下が正）。ミラー図法。 */
+  function millerY(lat) {
     var p = Math.max(-89, Math.min(89, lat)) * DEG;
     return -1.25 * Math.log(Math.tan(Math.PI / 4 + 0.4 * p)) / DEG;
   }
+  function sameY(y) { return y; }
 
-  /* 大州ごとの表示範囲。lon/lat の [西, 南, 東, 北]。
-     オセアニアは日付変更線をまたぐので、経度 200 まで取る。 */
-  var VIEWS = {
+  /* ---------------------------------------------------------------- *
+   * 表示範囲
+   * ---------------------------------------------------------------- */
+
+  /* 世界は lon/lat の [西, 南, 東, 北] で書き、描画座標に直して使う。
+     オセアニアは日付変更線をまたぐので経度 200 まで取る。 */
+  var WORLD_BOXES = {
     world:           [-180, -57, 180, 83],
     asia:            [25, -12, 152, 57],
     europe:          [-26, 33, 62, 72],
@@ -23,52 +30,97 @@
     oceania:         [110, -50, 200, 3]
   };
 
-  /* 日付変更線をまたぐ地図でも国が切れないよう、
-     同じ図形を経度 -360 / 0 / +360 の位置に置いて、
-     表示範囲に入るものだけ描く。 */
-  var OFFSETS = [-360, 0, 360];
+  /* 日本は jpn-atlas の座標のまま [左, 上, 右, 下] */
+  var JAPAN_VIEWS = {
+    all:               [15, 0, 665, 635],
+    'hokkaido-tohoku': [438, 0, 662, 292],
+    kanto:             [418, 256, 502, 402],
+    chubu:             [348, 216, 478, 356],
+    kinki:             [318, 296, 407, 390],
+    'chugoku-shikoku': [234, 277, 353, 408],
+    'kyushu-okinawa':  [20, 319, 286, 635]
+  };
+
+  var WORLD_VIEWS = {};
+  for (var k in WORLD_BOXES) {
+    var b = WORLD_BOXES[k];
+    WORLD_VIEWS[k] = [b[0], millerY(b[3]), b[2], millerY(b[1])];
+  }
+
+  /* ---------------------------------------------------------------- *
+   * アトラス
+   * ---------------------------------------------------------------- */
+  var ATLASES = {
+    world: {
+      key: 'world',
+      source: 'GEO',
+      projY: millerY,
+      /* 図形の bbox（lon/lat）→ 描画座標の [左, 上, 右, 下] */
+      drawBox: function (b) { return [b[0], millerY(b[3]), b[2], millerY(b[1])]; },
+      wrap: true,                       /* 日付変更線をまたぐので ±360 に複製する */
+      views: WORLD_VIEWS,
+      whole: 'world',
+      fit: { k: 5, min: 38, max: 190 }
+    },
+    japan: {
+      key: 'japan',
+      source: 'JAPAN_GEO',
+      projY: sameY,
+      drawBox: function (b) { return b; },
+      wrap: false,
+      views: JAPAN_VIEWS,
+      whole: 'all',
+      fit: { k: 5, min: 90, max: 640 }
+    }
+  };
+
+  function atlas(name) {
+    var a = ATLASES[name] || ATLASES.world;
+    if (!a.shapes) { a.shapes = global[a.source] || {}; a.boxCache = Object.create(null); }
+    return a;
+  }
+
+  function drawBoxOf(a, id) {
+    var hit = a.boxCache[id];
+    if (!hit) hit = a.boxCache[id] = a.drawBox(a.shapes[id].b);
+    return hit;
+  }
 
   /* 表示範囲を画面の縦横比に近づけるとき、広げすぎない上限 */
   var MAX_STRETCH = 1.6;
 
-  /* 「その国に寄った表示」の決め方。
-     国の大きさの FIT_K 倍を一辺とする四角を切り出す。
-     小さい国は寄りすぎ、大きい国は引きすぎになるので上下で止める。 */
-  var FIT_K = 5, FIT_MIN = 38, FIT_MAX = 190;
+  function wholeView(a) { return a.views[a.whole].slice(); }
 
-  /* 表示範囲は [x0, y0, x1, y1]（x は経度、y は projY した値）で持つ */
-  function toView(box) {
-    return [box[0], projY(box[3]), box[2], projY(box[1])];
+  function regionView(a, region) {
+    return (a.views[region] || a.views[a.whole]).slice();
   }
 
-  function worldView() { return toView(VIEWS.world); }
-
-  function regionView(region) { return toView(VIEWS[region] || VIEWS.world); }
-
-  function fitView(n3) {
-    var shape = global.GEO[n3];
-    if (!shape) return worldView();
-    var b = shape.b;
-    var y0 = projY(b[3]), y1 = projY(b[1]);
-    var span = Math.max(b[2] - b[0], y1 - y0) * FIT_K;
-    span = Math.max(FIT_MIN, Math.min(FIT_MAX, span));
-    var cx = (b[0] + b[2]) / 2, cy = (y0 + y1) / 2;
+  /** その国・県に寄った表示。大きさの k 倍を一辺とする四角を切り出す。 */
+  function fitView(a, id) {
+    if (!a.shapes[id]) return wholeView(a);
+    var b = drawBoxOf(a, id);
+    var span = Math.max(b[2] - b[0], b[3] - b[1]) * a.fit.k;
+    span = Math.max(a.fit.min, Math.min(a.fit.max, span));
+    var cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
     return [cx - span / 2, cy - span / 2, cx + span / 2, cy + span / 2];
   }
 
+  /* ---------------------------------------------------------------- *
+   * 描画
+   * ---------------------------------------------------------------- */
   var pathCache = Object.create(null);
 
-  function pathFor(n3, offset) {
-    var key = n3 + '|' + offset;
+  function pathFor(a, id, offset) {
+    var key = a.key + '|' + id + '|' + offset;
     if (pathCache[key]) return pathCache[key];
-    var shape = global.GEO[n3];
+    var shape = a.shapes[id];
     if (!shape) return '';
     var d = '';
     for (var i = 0; i < shape.p.length; i++) {
       var ring = shape.p[i];
       for (var j = 0; j < ring.length; j++) {
         d += (j ? 'L' : 'M') + (ring[j][0] + offset).toFixed(2) +
-             ' ' + projY(ring[j][1]).toFixed(2);
+             ' ' + a.projY(ring[j][1]).toFixed(2);
       }
       d += 'Z';
     }
@@ -76,36 +128,24 @@
     return d;
   }
 
-  /** その図形が表示範囲と重なるか */
-  function intersects(b, view, offset) {
-    return b[2] + offset >= view[0] && b[0] + offset <= view[2] &&
-           projY(b[1]) >= view[1] && projY(b[3]) <= view[3];
-  }
-
-  /** 図形の中心（描画座標）。小さい国に印をつけるのに使う。 */
-  function centerOf(n3, offset) {
-    var b = global.GEO[n3].b;
-    return {
-      x: (b[0] + b[2]) / 2 + offset,
-      y: (projY(b[1]) + projY(b[3])) / 2,
-      w: b[2] - b[0],
-      h: Math.abs(projY(b[1]) - projY(b[3]))
-    };
+  function intersects(box, view, offset) {
+    return box[2] + offset >= view[0] && box[0] + offset <= view[2] &&
+           box[3] >= view[1] && box[1] <= view[3];
   }
 
   /**
    * 地図を描く。
    * @param {SVGElement} svg
-   * @param {number[]} view  表示範囲 [x0, y0, x1, y1]
-   * @param {string|null} targetN3  強調表示する国（ccn3）
-   * @param {Element} boxEl  使える表示領域（この中に収まる大きさで描く）
+   * @param {object} a          アトラス（WorldMap.atlas('world') など）
+   * @param {number[]} view     表示範囲 [左, 上, 右, 下]
+   * @param {string|null} targetId  強調表示する国・県
+   * @param {Element} boxEl     使える表示領域（この中に収まる大きさで描く）
    */
-  function render(svg, view, targetN3, boxEl) {
+  function render(svg, a, view, targetId, boxEl) {
     var vx = view[0], vy = view[1];
     var vw = view[2] - view[0], vh = view[3] - view[1];
 
-    /* 画面の縦横比に近づける。広げすぎると地域が小さくなるので
-       MAX_STRETCH までにとどめる。 */
+    /* 画面の縦横比に近づける。広げすぎると対象が小さくなるので上限を設ける。 */
     var rect = (boxEl || svg.parentNode).getBoundingClientRect();
     var boxW = rect.width || 320, boxH = rect.height || 240;
     var aspect = boxW / boxH;
@@ -123,16 +163,17 @@
     svg.style.width = Math.round(vw * fit) + 'px';
     svg.style.height = Math.round(vh * fit) + 'px';
 
+    var offsets = a.wrap ? [-360, 0, 360] : [0];
     var shown = [vx, vy, vx + vw, vy + vh];
     var land = '', target = '', mark = '';
-    for (var n3 in global.GEO) {
-      var shape = global.GEO[n3];
-      for (var o = 0; o < OFFSETS.length; o++) {
-        var off = OFFSETS[o];
-        if (!intersects(shape.b, shown, off)) continue;
-        var d = pathFor(n3, off);
+
+    for (var id in a.shapes) {
+      var box = drawBoxOf(a, id);
+      for (var o = 0; o < offsets.length; o++) {
+        if (!intersects(box, shown, offsets[o])) continue;
+        var d = pathFor(a, id, offsets[o]);
         if (!d) continue;
-        if (n3 === targetN3) {
+        if (id === targetId) {
           /* 正解は、まわりを縁取ってから塗る。地の色から浮き上がって形が読みやすい。 */
           target += '<path class="c-halo" d="' + d + '"/>' +
                     '<path class="c-target" d="' + d + '"/>';
@@ -142,15 +183,16 @@
       }
     }
 
-    /* 画面に対して小さすぎる国は、丸い印で位置を示す */
-    if (targetN3 && global.GEO[targetN3]) {
-      var tb = global.GEO[targetN3].b;
-      for (var q = 0; q < OFFSETS.length; q++) {
-        if (!intersects(tb, shown, OFFSETS[q])) continue;
-        var c = centerOf(targetN3, OFFSETS[q]);
-        if (c.w < vw * 0.07 && c.h < vh * 0.07) {
+    /* 画面に対して小さすぎるときは、丸い印で位置を示す */
+    if (targetId && a.shapes[targetId]) {
+      var tb = drawBoxOf(a, targetId);
+      for (var q = 0; q < offsets.length; q++) {
+        if (!intersects(tb, shown, offsets[q])) continue;
+        var w = tb[2] - tb[0], h = tb[3] - tb[1];
+        if (w < vw * 0.07 && h < vh * 0.07) {
           var r = Math.max(vw, vh) * 0.04;
-          mark += '<circle class="c-mark" cx="' + c.x.toFixed(2) + '" cy="' + c.y.toFixed(2) +
+          var cx = (tb[0] + tb[2]) / 2 + offsets[q], cy = (tb[1] + tb[3]) / 2;
+          mark += '<circle class="c-mark" cx="' + cx.toFixed(2) + '" cy="' + cy.toFixed(2) +
                   '" r="' + r.toFixed(2) + '" stroke-width="' + (r * 0.22).toFixed(2) + '"/>';
         }
         break;
@@ -188,7 +230,6 @@
       if (!layer) return;
       clamp();
       layer.setAttribute('transform', 'translate(' + tx + ' ' + ty + ') scale(' + k + ')');
-      layer.style.setProperty('--k', k);
       svg.classList.toggle('is-zoomed', k > 1.02);
     }
     function reset() { k = 1; tx = 0; ty = 0; apply(); }
@@ -222,10 +263,10 @@
         if (lastDist > 0 && d > 0) {
           var ratio = d / lastDist;
           /* ピンチの中心を固定したまま拡大する */
-          var pt = svg.createSVGPoint();
-          pt.x = m.x; pt.y = m.y;
           var ctm = svg.getScreenCTM();
           if (ctm) {
+            var pt = svg.createSVGPoint();
+            pt.x = m.x; pt.y = m.y;
             var p = pt.matrixTransform(ctm.inverse());
             tx = p.x - (p.x - tx) * ratio;
             ty = p.y - (p.y - ty) * ratio;
@@ -266,10 +307,11 @@
   }
 
   global.WorldMap = {
+    atlas: atlas,
     render: render,
     fitView: fitView,
     regionView: regionView,
-    worldView: worldView,
+    wholeView: wholeView,
     attachGestures: attachGestures
   };
 })(window);

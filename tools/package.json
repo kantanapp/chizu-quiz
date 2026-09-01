@@ -4,11 +4,14 @@
   "type": "module",
   "description": "地図クイズのデータ生成スクリプト（アプリ本体の実行には不要）",
   "scripts": {
-    "build": "node build-data.mjs"
+    "build": "node build-data.mjs && node build-japan.mjs && node make-icons.mjs",
+    "build:japan": "node build-japan.mjs"
   },
   "dependencies": {
     "topojson-client": "^3.1.0",
     "world-atlas": "^2.0.2",
-    "world-countries": "^5.0.0"
+    "world-countries": "^5.0.0",
+    "jpn-atlas": "^1.0.2",
+    "@k1low/hanzi-writer-data-jp": "^0.8.0"
   }
 }

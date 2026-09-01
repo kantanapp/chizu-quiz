@@ -23,6 +23,111 @@
 
   function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
+  /* ---------------------------------------------------------------- *
+   * 日本の47都道府県
+   * ---------------------------------------------------------------- */
+  var JP_REGIONS = [
+    { id: 'all',               ja: '全国' },
+    { id: 'hokkaido-tohoku',   ja: '北海道・東北' },
+    { id: 'kanto',             ja: '関東' },
+    { id: 'chubu',             ja: '中部' },
+    { id: 'kinki',             ja: '近畿' },
+    { id: 'chugoku-shikoku',   ja: '中国・四国' },
+    { id: 'kyushu-okinawa',    ja: '九州・沖縄' }
+  ];
+
+  var SUFFIX_KANA = { '県': 'けん', '都': 'と', '府': 'ふ', '市': 'し', '': '' };
+
+  /** 表記設定にあわせた都道府県名 */
+  function jpLabel(p, style) {
+    if (style === 'kana') return p.yomi + SUFFIX_KANA[p.suffix];
+    if (style === 'both') return p.full + '（' + p.yomi + '）';
+    return p.full;
+  }
+
+  /** 表記設定にあわせた県庁所在地名 */
+  function jpCapLabel(p, style) {
+    if (style === 'kana') return p.capYomi + SUFFIX_KANA[p.capSuffix];
+    if (style === 'both') return p.capFull + '（' + p.capYomi + '）';
+    return p.capFull;
+  }
+
+  function jpPool(opts) {
+    return global.PREFECTURES.filter(function (p) {
+      if (opts.region && opts.region !== 'all' && p.region !== opts.region) return false;
+      if (opts.needMap && !p.hasMap) return false;
+      if (opts.needWrite && !p.write) return false;
+      return true;
+    });
+  }
+
+  /** まちがいの選択肢。同じ地方を優先し、足りなければ全国から足す。 */
+  function jpDistractors(answer, opts, n, byCapital) {
+    var taken = {}, out = [];
+    taken[answer.code] = true;
+    /* 県庁所在地の問題では、同じ地名が選択肢に並ばないようにする */
+    if (byCapital) taken['名:' + answer.capFull] = true;
+
+    var tiers = [
+      global.PREFECTURES.filter(function (p) { return p.region === answer.region; }),
+      jpPool({ region: opts.region }),
+      global.PREFECTURES
+    ];
+    for (var t = 0; t < tiers.length && out.length < n; t++) {
+      var cands = shuffle(tiers[t]);
+      for (var i = 0; i < cands.length && out.length < n; i++) {
+        var c = cands[i];
+        if (taken[c.code]) continue;
+        if (byCapital && taken['名:' + c.capFull]) continue;
+        taken[c.code] = true;
+        if (byCapital) taken['名:' + c.capFull] = true;
+        out.push(c);
+      }
+    }
+    return out;
+  }
+
+  /**
+   * 日本の問題を作る。
+   * @param {{mode:'jmap'|'jwrite'|'jcap'|'mix', region:string, count:number}} opts
+   */
+  function buildJapan(opts) {
+    var needMap = true;
+    var needWrite = opts.mode === 'jwrite';
+    var base = jpPool({ region: opts.region, needMap: needMap, needWrite: needWrite });
+    if (!base.length) return [];
+
+    var picked = shuffle(base).slice(0, Math.min(opts.count, base.length));
+
+    return picked.map(function (answer) {
+      var kind = opts.mode;
+      if (kind === 'mix') kind = pick(['jmap', 'jwrite', 'jcap']);
+      if (kind === 'jwrite' && !answer.write) kind = 'jmap';
+      var byCap = kind === 'jcap';
+      return {
+        kind: kind,
+        answer: answer,
+        choices: kind === 'jwrite' ? []
+               : shuffle([answer].concat(jpDistractors(answer, opts, 3, byCap)))
+      };
+    });
+  }
+
+  /** 復習用：まちがえた県だけで作り直す */
+  function rebuildJapan(wrong, opts) {
+    return shuffle(wrong).map(function (answer) {
+      var kind = opts.mode === 'mix' ? pick(['jmap', 'jwrite', 'jcap']) : opts.mode;
+      if (kind === 'jwrite' && !answer.write) kind = 'jmap';
+      var byCap = kind === 'jcap';
+      return {
+        kind: kind,
+        answer: answer,
+        choices: kind === 'jwrite' ? []
+               : shuffle([answer].concat(jpDistractors(answer, opts, 3, byCap)))
+      };
+    });
+  }
+
   /** 国旗の絵文字（🇯🇵 など）。ISO 2文字コードを地域指示記号に変換する。 */
   function flagEmoji(a2) {
     return String.fromCodePoint(
@@ -117,6 +222,12 @@
 
   global.Quiz = {
     REGIONS: REGIONS,
+    JP_REGIONS: JP_REGIONS,
+    buildJapan: buildJapan,
+    rebuildJapan: rebuildJapan,
+    jpPool: jpPool,
+    jpLabel: jpLabel,
+    jpCapLabel: jpCapLabel,
     build: build,
     rebuild: rebuild,
     pool: pool,

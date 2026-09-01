@@ -1,7 +1,7 @@
 {
-  "name": "世界地図クイズ",
+  "name": "地図クイズ",
   "short_name": "地図クイズ",
-  "description": "世界の地図と国旗から国名を当てるクイズ。日本語と英語、大州べつの出題に対応。",
+  "description": "世界の地図・国旗から国名を、日本の地図から都道府県名と県庁所在地を当てるクイズ。漢字はなぞって書いて判定できます。",
   "lang": "ja",
   "start_url": "./",
   "scope": "./",
@@ -9,11 +9,33 @@
   "orientation": "portrait",
   "background_color": "#f4f6fb",
   "theme_color": "#1d4ed8",
-  "categories": ["education"],
+  "categories": [
+    "education"
+  ],
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
-    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
   ]
 }
