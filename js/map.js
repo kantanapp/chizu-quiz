@@ -132,8 +132,13 @@
         if (!intersects(shape.b, shown, off)) continue;
         var d = pathFor(n3, off);
         if (!d) continue;
-        if (n3 === targetN3) target += '<path class="c-target" d="' + d + '"/>';
-        else land += '<path class="g' + (shape.c || 0) + '" d="' + d + '"/>';
+        if (n3 === targetN3) {
+          /* 正解は、まわりを縁取ってから塗る。地の色から浮き上がって形が読みやすい。 */
+          target += '<path class="c-halo" d="' + d + '"/>' +
+                    '<path class="c-target" d="' + d + '"/>';
+        } else {
+          land += '<path d="' + d + '"/>';
+        }
       }
     }
 

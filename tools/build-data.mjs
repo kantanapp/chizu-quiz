@@ -155,73 +155,6 @@ function bboxOf(polys) {
 }
 
 /* ------------------------------------------------------------------ *
- * 5. 塗り分け
- *    地図帳と同じで、隣り合う国が同じ色にならないように色番号を振る。
- *    国境がひと目で分かるようになる。
- * ------------------------------------------------------------------ */
-const PALETTE_SIZE = 6;
-
-function colorize(shapes) {
-  /* 頂点 → その頂点を持つ国。国境は同じ座標を共有しているので、
-     共有する頂点が2つ以上あれば隣どうしとみなせる。 */
-  const byVertex = new Map();
-  for (const id in shapes) {
-    for (const ring of shapes[id].p) {
-      for (const [lon, lat] of ring) {
-        let x = lon;
-        while (x >= 180) x -= 360;
-        while (x < -180) x += 360;
-        const key = x.toFixed(2) + ',' + lat.toFixed(2);
-        let set = byVertex.get(key);
-        if (!set) byVertex.set(key, (set = new Set()));
-        set.add(id);
-      }
-    }
-  }
-
-  const shared = new Map();
-  for (const ids of byVertex.values()) {
-    if (ids.size < 2) continue;
-    const arr = [...ids];
-    for (let i = 0; i < arr.length; i++) {
-      for (let j = i + 1; j < arr.length; j++) {
-        const k = arr[i] < arr[j] ? arr[i] + '|' + arr[j] : arr[j] + '|' + arr[i];
-        shared.set(k, (shared.get(k) || 0) + 1);
-      }
-    }
-  }
-
-  const nb = new Map();
-  for (const id in shapes) nb.set(id, new Set());
-  for (const [k, n] of shared) {
-    if (n < 2) continue;
-    const [a, b] = k.split('|');
-    nb.get(a).add(b);
-    nb.get(b).add(a);
-  }
-
-  /* 隣の多い国から順に、隣が使っていない色を割り当てる */
-  const order = Object.keys(shapes).sort((a, b) => nb.get(b).size - nb.get(a).size);
-  const color = new Map();
-  for (const id of order) {
-    const used = new Set();
-    for (const o of nb.get(id)) if (color.has(o)) used.add(color.get(o));
-    const start = Number(id) % PALETTE_SIZE;   /* 隣のない島も色がばらけるように */
-    let picked = start;
-    for (let t = 0; t < PALETTE_SIZE; t++) {
-      const cand = (start + t) % PALETTE_SIZE;
-      if (!used.has(cand)) { picked = cand; break; }
-    }
-    color.set(id, picked);
-  }
-
-  /* 塗り分けの品質を確かめる */
-  let clash = 0;
-  for (const [id, set] of nb) for (const o of set) if (color.get(id) === color.get(o)) clash++;
-  return { color, clash: clash / 2, edges: [...nb.values()].reduce((n, s) => n + s.size, 0) / 2 };
-}
-
-/* ------------------------------------------------------------------ *
  * 5. 組み立て
  * ------------------------------------------------------------------ */
 const fc = feature(topo, topo.objects.countries);
@@ -260,8 +193,6 @@ for (const [n3, polys] of geomByCcn3) {
   shapes[n3] = { p: polys, b: bboxOf(polys), q: quizIds.has(n3) ? 1 : 0 };
 }
 
-const painted = colorize(shapes);
-for (const n3 in shapes) shapes[n3].c = painted.color.get(n3);
 
 /* ------------------------------------------------------------------ *
  * 6. 書き出し
@@ -285,5 +216,4 @@ const byLevel = (n) => list.filter((c) => c.level <= n).length;
 console.log(`countries.js : ${list.length} か国 ` +
   `(やさしい ${byLevel(1)} / ふつう ${byLevel(2)} / すべて ${byLevel(3)}), ` +
   `地図あり ${list.filter((c) => c.hasMap).length}`);
-console.log(`geo.js       : ${Object.keys(shapes).length} 図形, ` +
-  `塗り分け ${painted.edges} 本の国境のうち同色の隣接 ${painted.clash} 件`);
+console.log(`geo.js       : ${Object.keys(shapes).length} 図形`);

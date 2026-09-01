@@ -13,18 +13,14 @@
   --accent-in: #ffffff;
   --ok:        #12855c;
   --ng:        #cf3b52;
-  /* 地図。地図帳と同じで、隣り合う国が別の色になるよう6色で塗り分ける。
-     海の青と正解のオレンジは、この6色のどれとも紛れない色にしてある。 */
-  --ocean:     #a3cfee;
-  --land-line: #ffffff;
+  /* 地図。陸は一色にして、国の区切りは境界線だけで見せる。
+     正解のオレンジが画面でいちばん目立つようにするため。 */
+  --ocean:     #a8d3ef;
+  --land:      #ece6d9;
+  --land-line: #97907f;
   --target:    #e8631a;
-  --target-line: #8f3c08;
-  --land-0:    #cfe2c0;
-  --land-1:    #efe2b4;
-  --land-2:    #e6cdd2;
-  --land-3:    #bcd9cf;
-  --land-4:    #dbd2ea;
-  --land-5:    #ead9c2;
+  --target-line: #7d3306;
+  --map-halo:  #ffffff;
   --shadow:    0 1px 2px rgba(20, 32, 60, .06), 0 8px 24px rgba(20, 32, 60, .07);
   --radius:    16px;
 }
@@ -40,16 +36,12 @@
     --accent-in: #0b1220;
     --ok:        #45d6a0;
     --ng:        #ff8095;
-    --ocean:     #0e2137;
-    --land-line: rgba(6, 14, 26, .65);
+    --ocean:     #0d2036;
+    --land:      #3d4a5e;
+    --land-line: #8ea2bd;
     --target:    #ff8c3a;
-    --target-line: #ffd9b0;
-    --land-0:    #3e5643;
-    --land-1:    #575039;
-    --land-2:    #563a44;
-    --land-3:    #2f5150;
-    --land-4:    #453d5c;
-    --land-5:    #5a4634;
+    --target-line: #ffe2c4;
+    --map-halo:  #0d2036;
     --shadow:    0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .35);
   }
 }
@@ -290,20 +282,25 @@ body {
 }
 .wmap.is-zoomed { cursor: move; }
 .wmap .c-land path {
+  fill: var(--land);
   stroke: var(--land-line);
-  stroke-width: .6;
+  stroke-width: .9;
+  stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
 }
-.wmap .g0 { fill: var(--land-0); }
-.wmap .g1 { fill: var(--land-1); }
-.wmap .g2 { fill: var(--land-2); }
-.wmap .g3 { fill: var(--land-3); }
-.wmap .g4 { fill: var(--land-4); }
-.wmap .g5 { fill: var(--land-5); }
+/* 正解の下じきになる縁取り。地の色と切り離して形を見せる。 */
+.wmap .c-halo {
+  fill: none;
+  stroke: var(--map-halo);
+  stroke-width: 5;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
 .wmap .c-target {
   fill: var(--target);
   stroke: var(--target-line);
-  stroke-width: 1.6;
+  stroke-width: 2;
+  stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
 }
 .wmap .c-mark {
