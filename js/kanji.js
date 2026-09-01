@@ -99,6 +99,10 @@
   /* ---------------------------------------------------------------- *
    * 表示
    * ---------------------------------------------------------------- */
+  function linePoints(line) {
+    return line.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' ');
+  }
+
   function svgEl(inner, cls) {
     return '<svg class="' + cls + '" viewBox="0 0 ' + VB + ' ' + VB + '" ' +
            'xmlns="http://www.w3.org/2000/svg">' + inner + '</svg>';
@@ -132,7 +136,13 @@
     if (!chars.length) return null;
 
     var state = chars.map(function (c) {
-      return { ch: c, done: global.KANJI[c].m.map(function () { return false; }), left: global.KANJI[c].m.length };
+      return {
+        ch: c,
+        done: global.KANJI[c].m.map(function () { return false; }),
+        left: global.KANJI[c].m.length,
+        /* どの画にも当てはまらなかった線。消さずに残す。 */
+        extra: []
+      };
     });
     var accept = o.guide ? ACCEPT_GUIDED : ACCEPT_FREE;
     var at = 0, mistakes = 0, hints = 0, finished = false;
@@ -158,6 +168,9 @@
       var done = d.s.map(function (p, i) {
         return s.done[i] ? '<path class="k-ink" d="' + p + '"/>' : '';
       }).join('');
+      var extra = s.extra.map(function (line) {
+        return '<polyline class="k-extra" points="' + linePoints(line) + '"/>';
+      }).join('');
       o.pad.innerHTML =
         '<svg class="k-pad" viewBox="0 0 ' + VB + ' ' + VB + '" xmlns="http://www.w3.org/2000/svg">' +
           '<g class="k-grid">' +
@@ -166,7 +179,7 @@
             '<line x1="8" y1="' + VB / 2 + '" x2="' + (VB - 8) + '" y2="' + VB / 2 + '"/>' +
           '</g>' +
           '<g class="k-space" transform="' + FLIP + '">' +
-            guide + done + '<g class="k-live"></g>' +
+            guide + done + extra + '<g class="k-live"></g>' +
           '</g>' +
         '</svg>';
       bind(o.pad.querySelector('.k-pad'));
@@ -223,10 +236,12 @@
       var s = state[at];
       var idx = match(pts, global.KANJI[s.ch].m, s.done, accept);
       if (idx < 0) {
-        mistakes++;
-        live.innerHTML = '<polyline class="k-live-line is-ng" points="' +
-          pts.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' ') + '"/>';
-        setTimeout(function () { live.innerHTML = ''; }, 260);
+        /* どの画にも当てはまらなくても、書いた線はそのまま残す。
+           そうしないと、答えとは違う漢字を書こうとしたときに
+           一画も書けず、消えていくだけになってしまう。 */
+        if (pts.length >= 2) { mistakes++; s.extra.push(pts); }
+        live.innerHTML = '';
+        renderPad();
         report();
         return;
       }
@@ -261,6 +276,7 @@
       var s = state[at];
       s.done = s.done.map(function () { return false; });
       s.left = s.done.length;
+      s.extra = [];
       renderPad(); renderStrip(); report();
     }
     function hint() {
@@ -277,21 +293,34 @@
       setTimeout(function () { if (flash.parentNode) flash.parentNode.removeChild(flash); }, 1100);
       report();
     }
+    /** 正解の形を出す。書いた線は残したまま重ねるので、見比べられる。 */
     function reveal() {
       state.forEach(function (s) {
         s.done = s.done.map(function () { return true; });
         s.left = 0;
       });
-      at = state.length - 1;
       finished = true;
       renderPad(); renderStrip(); report();
+    }
+
+    /**
+     * 今書けているところで答え合わせをする。
+     * 全部の画が書けていれば正解。足りなければ不正解にして正解の形を出す。
+     */
+    function submit() {
+      var total = 0, written = 0;
+      state.forEach(function (s) { total += s.done.length; written += s.done.length - s.left; });
+      var ok = written === total;
+      var extras = state.reduce(function (n, s) { return n + s.extra.length; }, 0);
+      if (!ok) reveal(); else finished = true;
+      return { ok: ok, written: written, total: total, mistakes: mistakes, hints: hints, extras: extras };
     }
     function isDone() { return finished; }
 
     renderStrip();
     renderPad();
     report();
-    return { clear: clear, hint: hint, reveal: reveal, isDone: isDone };
+    return { clear: clear, hint: hint, reveal: reveal, submit: submit, isDone: isDone };
   }
 
   global.KanjiPad = {

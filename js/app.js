@@ -354,7 +354,7 @@
       suffix: q.answer.suffix,
       guide: settings.guide === 'on',
       onComplete: function (r) {
-        var note = r.hints ? 'ヒント ' + r.hints + '回' : r.mistakes ? '書き直し ' + r.mistakes + '回' : '';
+        var note = r.hints ? 'ヒント ' + r.hints + '回' : '';
         finishQuestion(true, note);
       }
     });
@@ -510,10 +510,13 @@
 
     $('btn-k-clear').addEventListener('click', function () { if (pad) pad.clear(); });
     $('btn-k-hint').addEventListener('click', function () { if (pad) pad.hint(); });
-    $('btn-k-give').addEventListener('click', function () {
+    $('btn-k-answer').addEventListener('click', function () {
       if (!pad || state.answered) return;
-      pad.reveal();
-      finishQuestion(false, '答えを見た');
+      var r = pad.submit();
+      var note = r.ok
+        ? (r.hints ? 'ヒント ' + r.hints + '回' : '')
+        : (r.written ? r.total + '画のうち ' + r.written + '画' : '');
+      finishQuestion(r.ok, note);
     });
 
     /* 画面の向きが変わったら地図を描き直す */
