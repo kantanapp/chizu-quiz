@@ -211,6 +211,10 @@
    * ---------------------------------------------------------------- */
   function attachGestures(svg, getLayer) {
     var k = 1, tx = 0, ty = 0;
+    /* 地図を長押ししたときに出る「コピー／調べる」を止める。指の動きが拡大縮小に使えなくなるため */
+    svg.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    svg.addEventListener('dragstart', function (e) { e.preventDefault(); });
+
     var pointers = Object.create(null), count = 0;
     var last = null, lastDist = 0;
 
