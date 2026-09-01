@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <title>地図クイズ｜世界の国と日本の都道府県</title>
-<meta name="description" content="世界の地図・国旗から国名を、日本の地図から都道府県名と県庁所在地を当てるクイズ。漢字はなぞって書いて判定できます。">
+<meta name="description" content="世界の地図・国旗から国名を、日本の地図から都道府県名と県庁所在地を当てるクイズ。漢字はマスに自分の字で書いて、あとから答え合わせできます。">
 <meta name="theme-color" content="#1d4ed8" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0b1220" media="(prefers-color-scheme: dark)">
 <meta name="color-scheme" content="light dark">
@@ -161,12 +161,12 @@
       </div>
     </div>
 
-    <!-- 漢字を書く欄 -->
+    <!-- 漢字を書く欄。マスをまたいで、単語ぜんぶを好きな順に書ける -->
     <div class="writebox" id="writebox" hidden>
-      <div class="k-strip" id="k-strip"></div>
       <div class="k-padwrap" id="k-pad"></div>
       <div class="k-tools">
-        <button type="button" class="chip" id="btn-k-clear">↺ 消す</button>
+        <button type="button" class="chip" id="btn-k-undo">↩ もどす</button>
+        <button type="button" class="chip" id="btn-k-clear">🧹 ぜんぶ消す</button>
         <button type="button" class="chip" id="btn-k-hint">💡 ヒント</button>
         <button type="button" class="chip chip-go" id="btn-k-answer">✓ 答える</button>
       </div>
