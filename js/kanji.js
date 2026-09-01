@@ -9,6 +9,30 @@
   var VB = 1024;              /* 筆画データの座標系（1文字ぶん 1024 四方） */
   var BASE = 900;             /* データは y が上向き。画面の y = BASE - データの y */
 
+  /* いま指で書いている最中かどうか。書く欄はいくつも作り直されるので、
+     見張りはここに1つだけ置いて、旗を立てたり下ろしたりする。 */
+  var writing = false;
+
+  /* 書いているあいだは、指が書く欄の外へ出ても画面を動かさない。
+     はらいや、はねで線が欄をはみ出すのはふつうにあることで、
+     そこで画面がスクロールすると、マスが指の下でずれて線がとぎれる。
+     iPhone は touch を止めないとスクロールが始まるので、touchmove をここで押さえる。
+     capture にしてあるのは、途中のどの要素より先に受け取るため。 */
+  /* tools/check-kanji.mjs は画面のない Node で読み込むので、document があるときだけ置く。 */
+  if (typeof document !== 'undefined') {
+    document.addEventListener('touchmove', function (e) {
+      if (writing && e.cancelable) e.preventDefault();
+    }, { passive: false, capture: true });
+
+    /* 指がぜんぶ離れたら旗を下ろす。1本目の指の pointerup を取りこぼしても、
+       旗が立ちっぱなしになって、ホームや結果の画面がスクロールできなくなるのを防ぐ。 */
+    document.addEventListener('touchend', release, true);
+    document.addEventListener('touchcancel', release, true);
+  }
+  function release(e) {
+    if (!e.touches || e.touches.length === 0) writing = false;
+  }
+
   /* 判定のものさし（1024 四方の座標での距離と割合）。
      tools/check-kanji.mjs で測って決めた。
 
@@ -437,6 +461,7 @@
         e.preventDefault();
         svg.setPointerCapture(e.pointerId);
         drawing = e.pointerId;
+        writing = true;
         var p = toPad(e);
         points = p ? [p] : [];
         paintLive();
@@ -452,6 +477,7 @@
       function up(e) {
         if (drawing !== e.pointerId) return;
         drawing = null;
+        writing = false;
         var p = toPad(e);
         if (p && (!points.length || dist(points[points.length - 1], p) > 0.5)) points.push(p);
         if (points.length) strokes.push(points);
@@ -468,6 +494,18 @@
       svg.addEventListener('contextmenu', function (e) { e.preventDefault(); });
       svg.addEventListener('dragstart', function (e) { e.preventDefault(); });
       svg.addEventListener('selectstart', function (e) { e.preventDefault(); });
+
+      /* ---- 書いているあいだ、画面を動かさない ----
+         iPhone の Safari は pointerdown の preventDefault では指のスクロールを止めない。
+         止めているのは touch のほう。touch-action:none を CSS で置いてあっても、
+         書いた線が欄からはみ出したときや、指が2本になったときにすり抜けるので、
+         touch そのものをここで押さえる。画面がゆれると、マスが指の下でずれて字が書けない。 */
+      var stop = function (e) { if (e.cancelable) e.preventDefault(); };
+      svg.addEventListener('touchstart', stop, { passive: false });
+      svg.addEventListener('touchmove', stop, { passive: false });
+      /* touchend も止める。点や短い画を続けて書くと、iPhone に
+         「とんとんと2回たたいた」と受け取られて画面ごと拡大されるため。 */
+      svg.addEventListener('touchend', stop, { passive: false });
     }
 
     function report() {
