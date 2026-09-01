@@ -25,13 +25,17 @@ const STROKE = Number(process.env.STROKE ?? LIM.stroke);
 const WEAK = Number(process.env.WEAK ?? LIM.weak);
 const EXCESS = Number(process.env.EXCESS ?? LIM.excess);
 const MARGIN = Number(process.env.MARGIN ?? LIM.margin);
+const SCOVER = Number(process.env.SCOVER ?? LIM.strongCover);
+const SEXCESS = Number(process.env.SEXCESS ?? LIM.strongExcess);
 
 /** js/kanji.js の合否。ものさしを環境変数で振れるように、ここでも判定し直す。 */
-const passed = (j) => j.chars.every((c) =>
-  !!c.rank && c.rank.mine <= c.rank.best * (1 + MARGIN) &&
-  c.cover >= COVER &&
-  c.excess <= EXCESS &&
-  c.each.filter((f) => f < STROKE).length <= Math.floor(c.each.length * WEAK));
+const passed = (j) => j.chars.every((c) => {
+  const weak = c.each.filter((f) => f < STROKE).length;
+  const decent = c.cover >= COVER && c.excess <= EXCESS && weak <= Math.floor(c.each.length * WEAK);
+  const strong = c.cover >= SCOVER && c.excess <= SEXCESS && weak === 0;
+  const nearest = c.rank ? c.rank.mine <= c.rank.best * (1 + MARGIN) : true;
+  return decent && (strong || nearest);
+});
 
 /* ---- 乱数（毎回おなじ結果になるようにする） ---- */
 function mulberry32(a) {
@@ -72,14 +76,25 @@ function handwrite(median, r, o) {
   return out.length >= 2 ? out : pts.slice();
 }
 
-/** 単語ぜんぶを書いたことにする。文字ごとに位置と大きさもずらし、画をつなげたり分けたりする。 */
+/**
+ * 単語ぜんぶを書いたことにする。
+ * 文字ごとに位置と大きさをずらし、よこ長・かたむきといった書きぐせも付け、
+ * さらに画をつなげたり分けたりする。
+ */
 function writeWord(chars, r, o) {
   const out = [];
   chars.forEach((ch, ci) => {
     const cx = ci * 1024 + 512, cy = 512;
     const s = 1 + gauss(r) * o.scale;
+    /* マスは正方形なので、たて長の字を横に広げて書きがち。かたむきも付く */
+    const sx = s * (1 + gauss(r) * o.stretch), sy = s * (1 + gauss(r) * o.stretch);
+    const rot = gauss(r) * o.tilt;
+    const co = Math.cos(rot), si = Math.sin(rot);
     const dx = gauss(r) * o.place, dy = gauss(r) * o.place;
-    const put = (line) => line.map((p) => [cx + (p[0] - cx) * s + dx, cy + (p[1] - cy) * s + dy]);
+    const put = (line) => line.map((p) => {
+      const x = (p[0] - cx) * sx, y = (p[1] - cy) * sy;
+      return [cx + x * co - y * si + dx, cy + x * si + y * co + dy];
+    });
 
     let pending = null;                     /* つなげ書きの途中の線 */
     const lines = KANJI[ch].m;
@@ -122,9 +137,9 @@ const byLen = { 2: names.filter((n) => n.length === 2), 3: names.filter((n) => n
 
 /* ブレの想定。finger は 1マスの画面サイズから座標に直す（横 355px に N マス） */
 const LEVELS = [
-  { tag: 'ていねい', shape: 26, fingerPx: 1.6, scale: 0.03, place: 22, join: 0.05, split: 0.03 },
-  { tag: 'ふつう  ', shape: 42, fingerPx: 2.6, scale: 0.06, place: 36, join: 0.15, split: 0.08 },
-  { tag: 'ざつ    ', shape: 60, fingerPx: 3.6, scale: 0.09, place: 52, join: 0.30, split: 0.15 }
+  { tag: 'ていねい', shape: 26, fingerPx: 1.6, scale: 0.03, place: 22, join: 0.05, split: 0.03, stretch: 0.05, tilt: 0.03 },
+  { tag: 'ふつう  ', shape: 42, fingerPx: 2.6, scale: 0.06, place: 36, join: 0.15, split: 0.08, stretch: 0.10, tilt: 0.06 },
+  { tag: 'ざつ    ', shape: 60, fingerPx: 3.6, scale: 0.09, place: 52, join: 0.30, split: 0.15, stretch: 0.16, tilt: 0.10 }
 ];
 const TRIALS = 8;
 
@@ -144,7 +159,7 @@ function run(tol, nChars, lv) {
       j.chars.forEach((c) => {
         sumCover += c.cover; sumExcess += c.excess;
         sumWeak += c.each.filter((f) => f < STROKE).length / c.each.length;
-        if (c.rank && c.rank.mine <= c.rank.best * (1 + MARGIN)) top++;
+        if (!c.rank || c.rank.mine <= c.rank.best * (1 + MARGIN)) top++;
         nc++;
       });
 
@@ -172,7 +187,9 @@ console.log('単語=正解になった率、なぞれ/はみ出し=正しく書�
           + '別の字・でたらめ=まちがって通した率');
 console.log('合格の線: なぞれ >= ' + COVER + ' / はみ出し <= ' + EXCESS
           + ' / 抜けた画（' + STROKE + '未満）が画数の ' + WEAK + ' 以下'
-          + ' / 似ている順で一番から ' + MARGIN + ' 以内\n');
+          + '\n          文句なし: なぞれ >= ' + SCOVER + ' かつ はみ出し <= ' + SEXCESS
+          + '（このときは似ている順を見ない）'
+          + '\n          似ている順で一番から ' + MARGIN + ' 以内\n');
 for (const t of (TOLS.length ? TOLS : [null])) {
   console.log(t === null ? 'いまの js/kanji.js の設定' : 'TOL = ' + t);
   for (const n of [2, 3]) {

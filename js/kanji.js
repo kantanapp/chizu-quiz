@@ -12,23 +12,29 @@
   /* 判定のものさし（1024 四方の座標での距離と割合）。
      tools/check-kanji.mjs で測って決めた。
 
-     1画ずつ対応をつける見かたはやめた。指で書くと2画をつなげたり、1画を2回に
+     1画ずつ対応をつける見かたはやめてある。指で書くと2画をつなげたり、1画を2回に
      分けたりするのがふつうで、本数をそろえさせると、正しく書いていても
-     不正解になってしまうため（お手本をなぞっても不正解になっていた原因）。
-     かわりに、本数にも書き順にも左右されない次の3つで見る。
+     不正解になってしまうため。かわりに、本数にも書き順にも左右されない次の3つで見る。
        なぞれている割合 … お手本の形のうち、書いた線が近くを通っている割合
        抜けた画         … 1画ずつ見て、ほとんど通っていない画の数
        はみ出している割合 … 書いた線のうち、お手本のどこからも遠い部分の割合
      つなげ書きでできる渡りの線は はみ出し に出るだけで、なぞれている割合は落ちない。 */
   var TOL = 65;               /* お手本からどれだけ離れてよいか */
-  var COVER_MIN = 0.80;       /* 字ぜんぶで、なぞれている割合がこれ以上 */
+  var COVER_MIN = 0.85;       /* 字ぜんぶで、なぞれている割合がこれ以上 */
   var STROKE_MIN = 0.50;      /* 1画ずつ見て、なぞれている割合がこれ未満なら「抜けた画」 */
   var WEAK_RATIO = 0.10;      /* 抜けた画を、画数の何割まで見のがすか */
-  var EXCESS_MAX = 0.45;      /* はみ出している割合が、これ以下なら合格 */
-  /* ものさしだけでは「城」と「崎」のような似た字を分けられないので、
-     書いた字が 101字のうちどれにいちばん似ているかも見る。
-     いちばん近い字より、これ以上悪くなければ答えとみなす。 */
-  var MARGIN = 0.20;
+  var EXCESS_MAX = 0.40;      /* はみ出している割合が、これ以下なら合格 */
+  /* ここまできれいになぞれていたら、下の「似ている順」は見ずに正解にする。
+     お手本のとおりになぞって なぞれている割合が 1.00 でも、別の漢字がほんの
+     わずかに勝ったせいで不正解になっていた（青森の「青」で起きた）。
+     形が合っているという直接の証拠のほうを、順位より優先させる。 */
+  var STRONG_COVER = 0.97;
+  var STRONG_EXCESS = 0.20;
+  /* ものさしだけでは「城」と「崎」のような似た字を分けきれないので、
+     きれいになぞれていないときにかぎり、書いた字が 101字のうちどれに
+     いちばん似ているかも見る。いちばん近い字より、これ以上悪くなければ答えとみなす。
+     なぞり書きでも見る。外すと、お手本の上に別の字を書いても通ってしまうため。 */
+  var MARGIN = 0.30;
   var NORM = 256;             /* 形をくらべるときの大きさ（重心と、ちらばりをそろえる） */
   var MAP = 48;               /* 距離の表の細かさ（MAP×MAP マス） */
   var SPAN = 4 * NORM;        /* 表がカバーする範囲（-2NORM 〜 +2NORM） */
@@ -90,12 +96,14 @@
     for (var i = 0; i < pts.length; i++) { x += pts[i][0]; y += pts[i][1]; }
     return [x / pts.length, y / pts.length];
   }
+  /** たて・よこ それぞれの、ちらばりの大きさ */
   function spreadOf(pts, c) {
-    var v = 0;
+    var vx = 0, vy = 0;
     for (var i = 0; i < pts.length; i++) {
-      v += (pts[i][0] - c[0]) * (pts[i][0] - c[0]) + (pts[i][1] - c[1]) * (pts[i][1] - c[1]);
+      vx += (pts[i][0] - c[0]) * (pts[i][0] - c[0]);
+      vy += (pts[i][1] - c[1]) * (pts[i][1] - c[1]);
     }
-    return v / pts.length;
+    return [Math.sqrt(vx / pts.length), Math.sqrt(vy / pts.length)];
   }
 
   /**
@@ -107,12 +115,21 @@
     if (user.length < 12) return null;
     var cr = meanOf(ref), cu = meanOf(user);
     var vr = spreadOf(ref, cr), vu = spreadOf(user, cu);
-    if (!(vr > 0) || !(vu > 0)) return null;
-    var s = Math.min(1.25, Math.max(0.8, Math.sqrt(vu / vr)));
-    return { s: s, dx: cu[0] - s * cr[0], dy: cu[1] - s * cr[1] };
+    /* 「三」のように片側だけ細い字で、比が跳ねないように下限をつける */
+    var floor = function (v) {
+      var f = Math.max(v[0], v[1]) * 0.25;
+      return [Math.max(v[0], f), Math.max(v[1], f)];
+    };
+    var a = floor(vr), b = floor(vu);
+    if (!(a[0] > 0) || !(a[1] > 0)) return null;
+    /* たて・よこ べつべつに合わせる。マスが正方形なので、たて長の字を横に広げて
+       書くくせが出る。判定をゆるめるのではなく、ここで吸収する。 */
+    var clamp = function (k) { return Math.min(1.35, Math.max(0.75, k)); };
+    var sx = clamp(b[0] / a[0]), sy = clamp(b[1] / a[1]);
+    return { sx: sx, sy: sy, dx: cu[0] - sx * cr[0], dy: cu[1] - sy * cr[1] };
   }
   function moveBy(pts, f) {
-    return pts.map(function (p) { return [f.s * p[0] + f.dx, f.s * p[1] + f.dy]; });
+    return pts.map(function (p) { return [f.sx * p[0] + f.dx, f.sy * p[1] + f.dy]; });
   }
 
   function ratioNear(pts, near, r) {
@@ -131,8 +148,11 @@
   /** 重心を原点に、ちらばりを NORM にそろえる。大きさと位置のちがいを消すため。 */
   function normalize(pts) {
     var c = meanOf(pts), v = spreadOf(pts, c);
-    if (!(v > 0)) return null;
-    var k = NORM / Math.sqrt(v);
+    var d = Math.hypot(v[0], v[1]);
+    if (!(d > 0)) return null;
+    /* ここは たて・よこ をそろえない。字の縦横のバランスは見分けの手がかりなので、
+       つぶしてしまうと「青」と「潟」のような別の字が近くなってしまう。 */
+    var k = NORM / d;
     return pts.map(function (p) { return [(p[0] - c[0]) * k, (p[1] - c[1]) * k]; });
   }
 
@@ -281,15 +301,21 @@
       var excess = 1 - ratioNear(inkBy[ci], nearRef, tol);
       var weak = 0;
       each.forEach(function (f) { if (f < STROKE_MIN) weak++; });
+
+      /* ものさしで見て、そもそも形になっているか */
+      var decent = cover >= COVER_MIN &&
+                   excess <= EXCESS_MAX &&
+                   weak <= Math.floor(each.length * WEAK_RATIO);
+      /* 文句なくなぞれているか。ここまで来たら似ている順は見ない */
+      var strong = cover >= STRONG_COVER && excess <= STRONG_EXCESS && weak === 0;
+
       var rank = inkBy[ci].length ? ranking(inkBy[ci], ch) : null;
       var nearest = rank ? rank.mine <= rank.best * (1 + MARGIN) : false;
+
       return {
         ch: ch, ci: ci, cover: cover, excess: excess, weak: weak, each: each,
-        rank: rank, nearest: nearest,
-        ok: nearest &&
-            cover >= COVER_MIN &&
-            excess <= EXCESS_MAX &&
-            weak <= Math.floor(each.length * WEAK_RATIO)
+        rank: rank, decent: decent, strong: strong, nearest: nearest,
+        ok: decent && (strong || nearest)
       };
     });
     var ok = true;
@@ -506,8 +532,8 @@
     _judge: judge,
     _tolFor: tolFor,
     _limits: function () {
-      return { cover: COVER_MIN, stroke: STROKE_MIN, weak: WEAK_RATIO,
-               excess: EXCESS_MAX, margin: MARGIN };
+      return { cover: COVER_MIN, stroke: STROKE_MIN, weak: WEAK_RATIO, excess: EXCESS_MAX,
+               strongCover: STRONG_COVER, strongExcess: STRONG_EXCESS, margin: MARGIN };
     },
     _densify: densify
   };
