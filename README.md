@@ -30,29 +30,28 @@
 
 ## GitHub Pages で公開する
 
-このフォルダはリポジトリのどこに置いても、そのまま静的サイトとして動きます。
+ビルドは不要です。リポジトリをそのまま置くだけで動きます。
 
 1. GitHub のリポジトリ → **Settings → Pages**
 2. **Source** を `Deploy from a branch`、ブランチを `main` / フォルダを `/ (root)` にする
-3. `https://<ユーザー名>.github.io/<リポジトリ名>/chizu-quiz/` で開けます
+3. 数十秒待つと `https://kantanapp.github.io/chizu-quiz/` で開けます
 
-このアプリだけを独立したリポジトリで公開したい場合は、`chizu-quiz/` の中身をそのまま新しい
-リポジトリの直下にコピーして Pages を有効にすれば、`https://<ユーザー名>.github.io/<リポジトリ名>/`
-で開けます。
+## ローカルで確認する
 
-ローカルで確認するときは、このフォルダで簡易サーバーを立ててください
-（`file://` で直接開いても動きますが、オフライン用のキャッシュは有効になりません）。
+`index.html` をブラウザで開くだけで動きます（`file://` でも動作します。
+オフライン用のキャッシュだけが無効になります）。
+
+PWA の動作も含めて本番と同じ状態で見たいときは、簡易サーバーを立ててください。
 
 ```sh
-cd chizu-quiz
 python3 -m http.server 8000
-# → http://localhost:8000
+# → http://127.0.0.1:8000
 ```
 
 ## ファイル構成
 
 ```
-chizu-quiz/
+.
 ├── index.html                 画面の骨組み（3画面＋国いちらん）
 ├── css/style.css              見た目。ダークモード・iPhone のセーフエリア対応
 ├── js/
@@ -73,7 +72,7 @@ chizu-quiz/
 `data/` と `icons/` は生成物です。作り直すときだけ Node.js が必要です。
 
 ```sh
-cd chizu-quiz/tools
+cd tools
 npm install
 node build-data.mjs    # data/countries.js, data/geo.js
 node make-icons.mjs    # icons/*.png
@@ -88,7 +87,7 @@ node make-icons.mjs    # icons/*.png
 - `JA_OVERRIDE` / `EN_OVERRIDE` … 国名の表記を教科書に合わせて上書きする
 
 ファイルを更新したら、`sw.js` の先頭にある `CACHE` のバージョン
-（`chizu-quiz-v1` → `chizu-quiz-v2` …）を上げてください。古いキャッシュが残らなくなります。
+（`chizu-quiz-v3` → `chizu-quiz-v4` …）を上げてください。古いキャッシュが残らなくなります。
 
 ## 仕様のメモ
 

@@ -2,5 +2,4 @@
 tools/node_modules/
 tools/package-lock.json
 
-# リポジトリ直下の .gitignore が README.md を除外しているので、ここだけ元に戻す
-!README.md
+.DS_Store
