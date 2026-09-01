@@ -1,246 +1,300 @@
 /* 漢字を書く欄と、その判定。
    ・単語ぜんぶを横に並んだマスに、好きな順で一気に書く。
    ・書いた線はそのまま残す。お手本の形にすり替えない。
-   ・判定は「✓ 答える」を押したときに、書いた線の集合と正解の画の集合を突き合わせる。
-   ・書き順は採点しない。 */
+   ・判定は「✓ 答える」を押したときに、書いた線ぜんぶと正解の形を突き合わせる。
+   ・書き順も画の本数も見ない。字の形が合っているかだけを見る。 */
 (function (global) {
   'use strict';
 
   var VB = 1024;              /* 筆画データの座標系（1文字ぶん 1024 四方） */
   var BASE = 900;             /* データは y が上向き。画面の y = BASE - データの y */
 
-  /* 判定のしきい値（1024 四方の座標での距離）。tools/check-kanji.mjs で測って決めた。
-     手書きのブレを作って数えたところ、この値で
-       ・ふつうに書いた単語は 99% 通る（雑に書いても 89%）
-       ・別の県名を書いたものは 97% はじく、でたらめな線は 99% はじく
-     お手本のあり・なしでしきい値は変えない。お手本が見えているほうが易しい設定なので、
-     そこだけ厳しくすると理屈が逆になるため。 */
-  var ACCEPT = 210;
-  /* マスが増えると1マスが画面上で小さくなり、同じ指のブレが座標では大きく出る。
-     そのぶんだけ、しきい値を文字数に応じてゆるめる。 */
-  var SPREAD = 0.35;
-  /* どの画にも使われなかった線を、何本まで見のがすか（正解の画数に対する割合）。
-     これが無いと「山口」のつもりで「山形」を書いても通ってしまう。 */
-  var EXTRA_RATIO = 0.15;
-  var SAMPLES = 24;           /* 比べるときに線を何点に均すか */
+  /* 判定のものさし（1024 四方の座標での距離と割合）。
+     tools/check-kanji.mjs で測って決めた。
 
-  function acceptFor(nChars) { return ACCEPT * (1 + SPREAD * (nChars - 1)); }
-  function extraCapFor(nStrokes) { return Math.max(1, Math.floor(nStrokes * EXTRA_RATIO)); }
+     1画ずつ対応をつける見かたはやめた。指で書くと2画をつなげたり、1画を2回に
+     分けたりするのがふつうで、本数をそろえさせると、正しく書いていても
+     不正解になってしまうため（お手本をなぞっても不正解になっていた原因）。
+     かわりに、本数にも書き順にも左右されない次の3つで見る。
+       なぞれている割合 … お手本の形のうち、書いた線が近くを通っている割合
+       抜けた画         … 1画ずつ見て、ほとんど通っていない画の数
+       はみ出している割合 … 書いた線のうち、お手本のどこからも遠い部分の割合
+     つなげ書きでできる渡りの線は はみ出し に出るだけで、なぞれている割合は落ちない。 */
+  var TOL = 65;               /* お手本からどれだけ離れてよいか */
+  var COVER_MIN = 0.80;       /* 字ぜんぶで、なぞれている割合がこれ以上 */
+  var STROKE_MIN = 0.50;      /* 1画ずつ見て、なぞれている割合がこれ未満なら「抜けた画」 */
+  var WEAK_RATIO = 0.10;      /* 抜けた画を、画数の何割まで見のがすか */
+  var EXCESS_MAX = 0.45;      /* はみ出している割合が、これ以下なら合格 */
+  /* ものさしだけでは「城」と「崎」のような似た字を分けられないので、
+     書いた字が 101字のうちどれにいちばん似ているかも見る。
+     いちばん近い字より、これ以上悪くなければ答えとみなす。 */
+  var MARGIN = 0.20;
+  var NORM = 256;             /* 形をくらべるときの大きさ（重心と、ちらばりをそろえる） */
+  var MAP = 48;               /* 距離の表の細かさ（MAP×MAP マス） */
+  var SPAN = 4 * NORM;        /* 表がカバーする範囲（-2NORM 〜 +2NORM） */
+  /* マスが増えると1マスが画面上で小さくなり、同じ指のブレが座標では大きく出る。
+     そのぶんだけ、離れてよい距離を文字数に応じてゆるめる。 */
+  var SPREAD = 0.25;
+  var STEP = 16;              /* 線を点に均すときの間隔 */
+
+  function tolFor(nChars) { return TOL * (1 + SPREAD * (nChars - 1)); }
 
   /* ---------------------------------------------------------------- *
-   * 線の計算
+   * 線と点の計算
    * ---------------------------------------------------------------- */
   function dist(a, b) { return Math.hypot(a[0] - b[0], a[1] - b[1]); }
 
-  function polyLen(pts) {
-    var n = 0;
-    for (var i = 1; i < pts.length; i++) n += dist(pts[i - 1], pts[i]);
-    return n;
-  }
-
-  /** 線を等間隔の n 点に均す。点の多い少ないで判定がぶれないようにするため。 */
-  function resample(pts, n) {
-    if (pts.length === 1 || polyLen(pts) === 0) {
-      var out = [];
-      for (var q = 0; q < n; q++) out.push(pts[0].slice());
-      return out;
-    }
-    var total = polyLen(pts), step = total / (n - 1);
-    var res = [pts[0].slice()], acc = 0, i = 1, cur = pts[0];
-    while (res.length < n && i < pts.length) {
-      var d = dist(cur, pts[i]);
-      if (acc + d >= step && d > 0) {
-        var t = (step - acc) / d;
-        var p = [cur[0] + (pts[i][0] - cur[0]) * t, cur[1] + (pts[i][1] - cur[1]) * t];
-        res.push(p); cur = p; acc = 0;
-      } else { acc += d; cur = pts[i]; i++; }
-    }
-    while (res.length < n) res.push(pts[pts.length - 1].slice());
-    return res;
-  }
-
-  function distToSeg(p, a, b) {
-    var x = a[0], y = a[1], dx = b[0] - x, dy = b[1] - y;
-    if (dx !== 0 || dy !== 0) {
-      var t = ((p[0] - x) * dx + (p[1] - y) * dy) / (dx * dx + dy * dy);
-      if (t > 1) { x = b[0]; y = b[1]; }
-      else if (t > 0) { x += dx * t; y += dy * t; }
-    }
-    return Math.hypot(p[0] - x, p[1] - y);
-  }
-
-  function meanDistToPoly(pts, poly) {
-    var sum = 0;
-    for (var i = 0; i < pts.length; i++) {
-      var best = Infinity;
-      for (var j = 1; j < poly.length; j++) {
-        var d = distToSeg(pts[i], poly[j - 1], poly[j]);
-        if (d < best) best = d;
+  /** 線を、だいたい step ごとの点に均す。点の多い少ないで割合がぶれないようにするため。 */
+  function densify(pts, step) {
+    if (pts.length < 2) return [pts[0].slice()];
+    var out = [pts[0].slice()];
+    for (var i = 1; i < pts.length; i++) {
+      var a = out[out.length - 1], b = pts[i];
+      var n = Math.max(1, Math.round(dist(a, b) / step));
+      for (var k = 1; k <= n; k++) {
+        out.push([a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n]);
       }
-      sum += best;
     }
-    return sum / pts.length;
-  }
-
-  /** 書いた線と、お手本の画がどれだけ違うか。小さいほど近い。 */
-  function cost(user, median) {
-    var a = meanDistToPoly(user, median);
-    var b = meanDistToPoly(median, user);
-    /* 端と端。向きは問わないので、順・逆の近いほうを取る */
-    var e1 = dist(user[0], median[0]) + dist(user[user.length - 1], median[median.length - 1]);
-    var e2 = dist(user[0], median[median.length - 1]) + dist(user[user.length - 1], median[0]);
-    return 0.35 * a + 0.35 * b + 0.3 * (Math.min(e1, e2) / 2);
-  }
-
-  /** 線を囲む四角。遠い組み合わせを先に外すのに使う。 */
-  function bbox(pts) {
-    var x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (var i = 0; i < pts.length; i++) {
-      if (pts[i][0] < x0) x0 = pts[i][0];
-      if (pts[i][0] > x1) x1 = pts[i][0];
-      if (pts[i][1] < y0) y0 = pts[i][1];
-      if (pts[i][1] > y1) y1 = pts[i][1];
-    }
-    return [x0, y0, x1, y1];
-  }
-  /** 四角どうしのすき間。これより小さい cost にはならないので、しきい値より広ければ計算しない。 */
-  function boxGap(a, b) {
-    var dx = Math.max(0, Math.max(a[0] - b[2], b[0] - a[2]));
-    var dy = Math.max(0, Math.max(a[1] - b[3], b[1] - a[3]));
-    return Math.hypot(dx, dy);
+    return out;
   }
 
   /**
-   * 書いた線の集合と、正解の画の集合を突き合わせる。
-   * 書き順は見ないので、いちばん近い組から順に取っていく（1本は1画にしか使わない）。
-   *
-   * 一度取れた組から「その文字をどのくらいの大きさで、どこに書いたか」を割り出し、
-   * お手本のほうをそこに合わせ直して、もう一度突き合わせる（合わせて増えたときだけ採用）。
-   * こうすると、字が小さめ・右寄りといった書きぐせを、判定のゆるさではなく
-   * 位置合わせのほうで吸収できる。
-   *
-   * @param {Array<Array<[number,number]>>} userStrokes 書いた線（画面座標）
-   * @param {Array<{ci:number, si:number, pts:Array}>} refs 正解の画（画面座標）
-   * @param {number} accept しきい値
-   * @returns {{pairs:Array<number>, hit:Array<boolean>, matched:number}}
-   *   pairs[画の番号] = 使った線の番号（無ければ -1）、hit[線の番号] = 使われたか
+   * 「この点の近くに点があるか」を何度も聞くための升目。
+   * 総当たりだと点の数の掛け算になるので、cell ごとの箱に入れて近所だけ見る。
+   * @param {number} cell 箱の大きさ。これ以下の半径でしか聞けない。
    */
-  function matchAll(userStrokes, refs, accept) {
-    var u = userStrokes.map(function (s) { return resample(s, SAMPLES); });
-    var ub = u.map(bbox);
-    var r0 = refs.map(function (x) { return resample(x.pts, SAMPLES); });
-
-    /* 文字ごとに画の番号をまとめておく */
-    var chars = [];
-    refs.forEach(function (x, i) {
-      (chars[x.ci] || (chars[x.ci] = [])).push(i);
-    });
-
-    var pairs = refs.map(function () { return -1; });
-    var hit = userStrokes.map(function () { return false; });
-
-    /** 近い組から順に取る。すでに使った画・線は飛ばす。 */
-    function greedy(refIdx, r, rb) {
-      var costs = [];
-      refIdx.forEach(function (ri) {
-        if (pairs[ri] >= 0) return;
-        for (var ui = 0; ui < u.length; ui++) {
-          if (hit[ui] || boxGap(ub[ui], rb[ri]) > accept) continue;
-          var c = cost(u[ui], r[ri]);
-          if (c <= accept) costs.push([c, ri, ui]);
+  function grid(points, cell) {
+    var box = Object.create(null);
+    for (var i = 0; i < points.length; i++) {
+      var k = Math.floor(points[i][0] / cell) + ',' + Math.floor(points[i][1] / cell);
+      (box[k] || (box[k] = [])).push(points[i]);
+    }
+    return function near(p, r) {
+      var gx = Math.floor(p[0] / cell), gy = Math.floor(p[1] / cell), r2 = r * r;
+      for (var dx = -1; dx <= 1; dx++) {
+        for (var dy = -1; dy <= 1; dy++) {
+          var b = box[(gx + dx) + ',' + (gy + dy)];
+          if (!b) continue;
+          for (var i = 0; i < b.length; i++) {
+            var ex = b[i][0] - p[0], ey = b[i][1] - p[1];
+            if (ex * ex + ey * ey <= r2) return true;
+          }
         }
-      });
-      costs.sort(function (a, b) { return a[0] - b[0]; });
-      var n = 0;
-      costs.forEach(function (c) {
-        if (pairs[c[1]] >= 0 || hit[c[2]]) return;
-        pairs[c[1]] = c[2]; hit[c[2]] = true; n++;
-      });
-      return n;
+      }
+      return false;
+    };
+  }
+
+  function meanOf(pts) {
+    var x = 0, y = 0;
+    for (var i = 0; i < pts.length; i++) { x += pts[i][0]; y += pts[i][1]; }
+    return [x / pts.length, y / pts.length];
+  }
+  function spreadOf(pts, c) {
+    var v = 0;
+    for (var i = 0; i < pts.length; i++) {
+      v += (pts[i][0] - c[0]) * (pts[i][0] - c[0]) + (pts[i][1] - c[1]) * (pts[i][1] - c[1]);
     }
-
-    var rb0 = r0.map(bbox);
-    var order = [];
-    for (var i = 0; i < refs.length; i++) order.push(i);
-    greedy(order, r0, rb0);
-
-    /* 文字ごとに位置と大きさを合わせ直して、もう一度 */
-    chars.forEach(function (idx) {
-      var got = idx.filter(function (ri) { return pairs[ri] >= 0; });
-      if (!got.length || got.length === idx.length) return;
-
-      var f = fit(got.map(function (ri) { return r0[ri]; }),
-                  got.map(function (ri) { return u[pairs[ri]]; }));
-      if (!f) return;
-
-      var r1 = r0.slice(), rb1 = rb0.slice();
-      idx.forEach(function (ri) {
-        r1[ri] = apply(r0[ri], f);
-        rb1[ri] = bbox(r1[ri]);
-      });
-
-      /* 合わせ直したうえで取り直す。減ってしまったら元に戻す。 */
-      var keepPairs = pairs.slice(), keepHit = hit.slice();
-      var before = got.length;
-      idx.forEach(function (ri) {
-        if (pairs[ri] >= 0) { hit[pairs[ri]] = false; pairs[ri] = -1; }
-      });
-      var after = greedy(idx, r1, rb1);
-      if (after < before) { pairs = keepPairs; hit = keepHit; }
-    });
-
-    var matched = 0;
-    pairs.forEach(function (p) { if (p >= 0) matched++; });
-    return { pairs: pairs, hit: hit, matched: matched };
+    return v / pts.length;
   }
 
   /**
-   * 取れた組から「お手本をどれだけ動かし、どれだけ拡げれば、書いた字に重なるか」を出す。
-   * 向きや書き順に左右されないよう、点の重心とちらばりだけで決める。
+   * 「お手本をどれだけ動かし、どれだけ拡げれば、書いた字に重なるか」を出す。
+   * 書き順にも画の本数にも左右されないよう、点の重心とちらばりだけで決める。
+   * 字が小さめ・右寄りといった書きぐせは、判定をゆるめるのではなくここで吸収する。
    */
-  function fit(refList, userList) {
-    var cr = centroidOf(refList), cu = centroidOf(userList);
-    var vr = spreadOf(refList, cr), vu = spreadOf(userList, cu);
-    if (!(vr > 0)) return null;
-    var s = Math.sqrt(vu / vr);
-    if (refList.length < 2) s = 1;                 /* 1本だけでは大きさは決められない */
-    s = Math.min(1.3, Math.max(0.75, s));
+  function cloudFit(ref, user) {
+    if (user.length < 12) return null;
+    var cr = meanOf(ref), cu = meanOf(user);
+    var vr = spreadOf(ref, cr), vu = spreadOf(user, cu);
+    if (!(vr > 0) || !(vu > 0)) return null;
+    var s = Math.min(1.25, Math.max(0.8, Math.sqrt(vu / vr)));
     return { s: s, dx: cu[0] - s * cr[0], dy: cu[1] - s * cr[1] };
   }
-  function apply(pts, f) {
+  function moveBy(pts, f) {
     return pts.map(function (p) { return [f.s * p[0] + f.dx, f.s * p[1] + f.dy]; });
   }
-  function centroidOf(list) {
-    var x = 0, y = 0, n = 0;
-    list.forEach(function (pts) {
-      for (var i = 0; i < pts.length; i++) { x += pts[i][0]; y += pts[i][1]; n++; }
-    });
-    return [x / n, y / n];
-  }
-  function spreadOf(list, c) {
-    var v = 0, n = 0;
-    list.forEach(function (pts) {
-      for (var i = 0; i < pts.length; i++) {
-        v += (pts[i][0] - c[0]) * (pts[i][0] - c[0]) + (pts[i][1] - c[1]) * (pts[i][1] - c[1]);
-        n++;
-      }
-    });
-    return v / n;
+
+  function ratioNear(pts, near, r) {
+    var n = 0;
+    for (var i = 0; i < pts.length; i++) if (near(pts[i], r)) n++;
+    return pts.length ? n / pts.length : 0;
   }
 
-  /** 正解の画を、マスを横に並べた画面座標に置き直す。 */
-  function refStrokes(chars) {
-    var out = [];
-    chars.forEach(function (ch, ci) {
-      var ox = ci * VB;
-      global.KANJI[ch].m.forEach(function (median, si) {
-        out.push({
-          ci: ci, si: si,
-          pts: median.map(function (p) { return [p[0] + ox, BASE - p[1]]; })
-        });
-      });
+  /* ---------------------------------------------------------------- *
+   * 字の形くらべ
+   *   「答えの字にどれだけ近いか」だけでは、似た字（城と崎など）を分けられない。
+   *   そこで、書いた字が 101字のうちどれにいちばん似ているかを見る。
+   *   大きさと位置は先にそろえるので、小さく書いても右に寄っても結果は変わらない。
+   * ---------------------------------------------------------------- */
+
+  /** 重心を原点に、ちらばりを NORM にそろえる。大きさと位置のちがいを消すため。 */
+  function normalize(pts) {
+    var c = meanOf(pts), v = spreadOf(pts, c);
+    if (!(v > 0)) return null;
+    var k = NORM / Math.sqrt(v);
+    return pts.map(function (p) { return [(p[0] - c[0]) * k, (p[1] - c[1]) * k]; });
+  }
+
+  /**
+   * マス目に「いちばん近い線までの距離」を書き込んだ表を作る。
+   * 毎回すべての点どうしを比べると重いので、表を1度作って引くだけにする。
+   * （となりのマスから足していく、ふつうの距離変換）
+   */
+  function distMap(pts) {
+    var step = SPAN / MAP, big = SPAN;
+    var d = new Float32Array(MAP * MAP);
+    var i, x, y;
+    for (i = 0; i < d.length; i++) d[i] = big;
+    for (i = 0; i < pts.length; i++) {
+      x = Math.round((pts[i][0] + SPAN / 2) / step);
+      y = Math.round((pts[i][1] + SPAN / 2) / step);
+      if (x >= 0 && x < MAP && y >= 0 && y < MAP) d[y * MAP + x] = 0;
+    }
+    var diag = step * Math.SQRT2;
+    function relax(x1, y1, x2, y2) {
+      var a = d[y1 * MAP + x1] + (x1 === x2 || y1 === y2 ? step : diag);
+      if (a < d[y2 * MAP + x2]) d[y2 * MAP + x2] = a;
+    }
+    for (y = 0; y < MAP; y++) for (x = 0; x < MAP; x++) {
+      if (x > 0) relax(x - 1, y, x, y);
+      if (y > 0) relax(x, y - 1, x, y);
+      if (x > 0 && y > 0) relax(x - 1, y - 1, x, y);
+      if (x < MAP - 1 && y > 0) relax(x + 1, y - 1, x, y);
+    }
+    for (y = MAP - 1; y >= 0; y--) for (x = MAP - 1; x >= 0; x--) {
+      if (x < MAP - 1) relax(x + 1, y, x, y);
+      if (y < MAP - 1) relax(x, y + 1, x, y);
+      if (x < MAP - 1 && y < MAP - 1) relax(x + 1, y + 1, x, y);
+      if (x > 0 && y < MAP - 1) relax(x - 1, y + 1, x, y);
+    }
+    return d;
+  }
+  function lookup(d, p) {
+    var step = SPAN / MAP;
+    var x = Math.round((p[0] + SPAN / 2) / step), y = Math.round((p[1] + SPAN / 2) / step);
+    if (x < 0 || x >= MAP || y < 0 || y >= MAP) return SPAN;
+    return d[y * MAP + x];
+  }
+  function meanLookup(pts, d) {
+    var s = 0;
+    for (var i = 0; i < pts.length; i++) s += lookup(d, pts[i]);
+    return s / pts.length;
+  }
+  /** 2つの形のへだたり。片側だけだと「一部しか書いていない」を見のがすので、両方向を平均する。 */
+  function shapeGap(a, ma, b, mb) {
+    return 0.5 * meanLookup(a, mb) + 0.5 * meanLookup(b, ma);
+  }
+
+  /** 1文字ぶんのお手本を、くらべられる形にして覚えておく（毎回作り直さない） */
+  var shapeCache = {};
+  function shapeOf(ch) {
+    if (shapeCache[ch]) return shapeCache[ch];
+    var pts = [];
+    global.KANJI[ch].m.forEach(function (median) {
+      densify(median.map(function (p) { return [p[0], BASE - p[1]]; }), STEP)
+        .forEach(function (p) { pts.push(p); });
     });
+    var np = normalize(pts);
+    return (shapeCache[ch] = np ? { pts: np, map: distMap(np) } : null);
+  }
+
+  /**
+   * 書いた字が、101字のうちどれにいちばん似ているかを見る。
+   * @returns {{mine:number, best:number, bestCh:string}} へだたり。小さいほど似ている。
+   */
+  function ranking(inkPts, ch) {
+    var a = normalize(inkPts);
+    if (!a) return null;
+    var ma = distMap(a);
+    var mine = Infinity, best = Infinity, bestCh = '';
+    for (var k in global.KANJI) {
+      var t = shapeOf(k);
+      if (!t) continue;
+      var g = shapeGap(a, ma, t.pts, t.map);
+      if (k === ch) mine = g;
+      if (g < best) { best = g; bestCh = k; }
+    }
+    return { mine: mine, best: best, bestCh: bestCh };
+  }
+
+  /** 正解の形（各画の中心線）を、マスを横に並べた画面座標の点の集まりにする。画ごとに分けて持つ。 */
+  function refCloud(ch, ci) {
+    return global.KANJI[ch].m.map(function (median) {
+      return densify(median.map(function (p) { return [p[0] + ci * VB, BASE - p[1]]; }), STEP);
+    });
+  }
+  function flat(lists) {
+    var out = [];
+    lists.forEach(function (l) { l.forEach(function (p) { out.push(p); }); });
     return out;
+  }
+
+  /**
+   * 書いた線ぜんぶと、正解の形を突き合わせる。
+   *
+   * 見るのは3つ。どれも画の本数や書き順に左右されない。
+   *   なぞれている割合 … 字ぜんぶで、お手本の近くを線が通っている割合
+   *   抜けた画         … 1画ずつ見て、ほとんど通っていない画の数
+   *   はみ出し         … 書いた線のうち、お手本のどこからも遠い部分の割合
+   *
+   * 「抜けた画」を別に数えるのは、割合の合計だけだと、短い画をまるごと
+   * 書き落としても気づけないため。逆に、2画をつなげて書いたときにできる
+   * 渡りの線は はみ出し に出るだけで、なぞれている割合は落ちない。
+   *
+   * @param {Array<Array<[number,number]>>} strokes 書いた線（画面座標）
+   * @param {Array<string>} chars 正解の文字
+   * @param {number} tol お手本からどれだけ離れてよいか
+   */
+  function judge(strokes, chars, tol) {
+    var n = chars.length;
+    var refs = chars.map(refCloud);
+
+    var ink = [];
+    strokes.forEach(function (s) {
+      densify(s, STEP).forEach(function (p) { ink.push(p); });
+    });
+    /* 書いた点を、どのマスのものとして数えるか。マスをまたぐ線は途中で分かれる。 */
+    var inkBy = chars.map(function () { return []; });
+    ink.forEach(function (p) {
+      inkBy[Math.max(0, Math.min(n - 1, Math.floor(p[0] / VB)))].push(p);
+    });
+
+    var nearInk = grid(ink, tol);
+
+    /* 文字ごとに、書かれた位置と大きさへお手本を寄せてから見る。
+       寄せてよくならなければ、寄せないほうを使う。 */
+    refs = refs.map(function (ref, ci) {
+      var f = cloudFit(flat(ref), inkBy[ci]);
+      if (!f) return ref;
+      var moved = ref.map(function (line) { return moveBy(line, f); });
+      return ratioNear(flat(moved), nearInk, tol) > ratioNear(flat(ref), nearInk, tol) ? moved : ref;
+    });
+
+    /* はみ出しは、そのマスのお手本だけでなく単語ぜんぶのお手本から見る。
+       となりのマスへはみ出した線を、それだけで罰しないため。 */
+    var nearRef = grid(flat(refs.map(flat)), tol);
+
+    var out = chars.map(function (ch, ci) {
+      var each = refs[ci].map(function (line) { return ratioNear(line, nearInk, tol); });
+      var cover = ratioNear(flat(refs[ci]), nearInk, tol);
+      var excess = 1 - ratioNear(inkBy[ci], nearRef, tol);
+      var weak = 0;
+      each.forEach(function (f) { if (f < STROKE_MIN) weak++; });
+      var rank = inkBy[ci].length ? ranking(inkBy[ci], ch) : null;
+      var nearest = rank ? rank.mine <= rank.best * (1 + MARGIN) : false;
+      return {
+        ch: ch, ci: ci, cover: cover, excess: excess, weak: weak, each: each,
+        rank: rank, nearest: nearest,
+        ok: nearest &&
+            cover >= COVER_MIN &&
+            excess <= EXCESS_MAX &&
+            weak <= Math.floor(each.length * WEAK_RATIO)
+      };
+    });
+    var ok = true;
+    out.forEach(function (c) { if (!c.ok) ok = false; });
+    return { ok: ok, chars: out };
   }
 
   /* ---------------------------------------------------------------- *
@@ -258,22 +312,20 @@
            'xmlns="http://www.w3.org/2000/svg">' + inner + '</svg>';
   }
 
-  /** いちらん・結果でつかう小さな1文字。upTo を渡すとその画だけ濃くする。 */
-  function charSVG(ch, cls, upTo) {
+  /** いちらん・結果でつかう小さな1文字 */
+  function charSVG(ch, cls) {
     var d = global.KANJI[ch];
     if (!d) return svgEl('', cls);
-    var paths = d.s.map(function (p, i) {
-      var on = upTo == null || upTo[i];
-      return '<path class="' + (on ? 'k-on' : 'k-off') + '" d="' + p + '"/>';
-    }).join('');
+    var paths = d.s.map(function (p) { return '<path class="k-on" d="' + p + '"/>'; }).join('');
     return svgEl('<g transform="' + FLIP + '">' + paths + '</g>', cls);
   }
 
-  /** 文字ごとに輪郭パスをまとめて出す。pick(ci,si) が false の画は出さない。 */
+  /** 文字ごとに輪郭パスをまとめて出す。pick(ci) が false の文字は出さない。 */
   function overlay(chars, cls, pick) {
     return chars.map(function (ch, ci) {
-      var paths = global.KANJI[ch].s.map(function (p, si) {
-        return (!pick || pick(ci, si)) ? '<path class="' + cls + '" d="' + p + '"/>' : '';
+      if (pick && !pick(ci)) return '';
+      var paths = global.KANJI[ch].s.map(function (p) {
+        return '<path class="' + cls + '" d="' + p + '"/>';
       }).join('');
       return '<g transform="' + cellTransform(ci) + '">' + paths + '</g>';
     }).join('');
@@ -296,8 +348,7 @@
 
     var N = chars.length;
     var W = N * VB;
-    var refs = refStrokes(chars);
-    var accept = acceptFor(N);
+    var tol = tolFor(N);
 
     var strokes = [];        /* 書いた線。消さずにそのまま残す */
     var hints = 0;
@@ -315,13 +366,12 @@
                 '<line x1="' + (x + VB / 2) + '" y1="8" x2="' + (x + VB / 2) + '" y2="' + (VB - 8) + '"/>' +
                 '<line x1="' + (x + 8) + '" y1="' + VB / 2 + '" x2="' + (x + VB - 8) + '" y2="' + VB / 2 + '"/>';
       }
-      var guide = o.guide ? overlay(chars, 'k-guide') : '';
 
       o.pad.innerHTML =
         '<svg class="k-pad" viewBox="0 0 ' + W + ' ' + VB + '" style="aspect-ratio:' + N + ' / 1" ' +
              'xmlns="http://www.w3.org/2000/svg">' +
           '<g class="k-grid">' + grid + '</g>' +
-          guide +
+          (o.guide ? overlay(chars, 'k-guide') : '') +
           '<g class="k-mark"></g>' +
           '<g class="k-ink"></g>' +
           '<g class="k-live"></g>' +
@@ -396,7 +446,6 @@
     function clear() {
       if (finished) return;
       strokes = [];
-      markG.innerHTML = '';
       paintInk(); report();
     }
     function undo() {
@@ -415,30 +464,19 @@
       report();
     }
 
-    /**
-     * 答え合わせ。書いた線はそのまま。足りなかった画だけ上に重ねて見せる。
-     */
+    /** 答え合わせ。書いた線はそのまま。ちがっていた文字だけ正解の形を重ねて見せる。 */
     function submit() {
       if (judged) return judged;
       finished = true;
-      var m = matchAll(strokes, refs, accept);
-      var miss = {};
-      refs.forEach(function (x, i) {
-        if (m.pairs[i] < 0) miss[x.ci + ':' + x.si] = true;
-      });
-      var extras = 0;
-      m.hit.forEach(function (h) { if (!h) extras++; });
-      var cap = extraCapFor(refs.length);
-      var ok = m.matched === refs.length && extras <= cap;
-      if (!ok) {
+      var j = judge(strokes, chars, tol);
+      if (!j.ok) {
+        var bad = {};
+        j.chars.forEach(function (c) { if (!c.ok) bad[c.ci] = true; });
         markG.innerHTML =
           overlay(chars, 'k-answer') +
-          overlay(chars, 'k-missing', function (ci, si) { return miss[ci + ':' + si]; });
+          overlay(chars, 'k-missing', function (ci) { return !!bad[ci]; });
       }
-      judged = {
-        ok: ok, matched: m.matched, total: refs.length,
-        strokes: strokes.length, extras: extras, extraCap: cap, hints: hints
-      };
+      judged = { ok: j.ok, chars: j.chars, strokes: strokes.length, hints: hints };
       return judged;
     }
 
@@ -459,11 +497,12 @@
     create: create,
     charSVG: charSVG,
     /* テスト用に中身も出しておく */
-    _matchAll: matchAll,
-    _refStrokes: refStrokes,
-    _acceptFor: acceptFor,
-    _extraCapFor: extraCapFor,
-    _cost: cost,
-    _resample: resample
+    _judge: judge,
+    _tolFor: tolFor,
+    _limits: function () {
+      return { cover: COVER_MIN, stroke: STROKE_MIN, weak: WEAK_RATIO,
+               excess: EXCESS_MAX, margin: MARGIN };
+    },
+    _densify: densify
   };
 })(window);
