@@ -152,6 +152,7 @@
     var n = Quiz.pool({ region: settings.region, level: settings.level, needMap: needMap }).length;
     var t = regionLabel(settings.region) + '・' + levelLabel(settings.level) + 'で ' + n + 'か国が対象です。';
     if (needMap) t += '（地図に描けない小さな国はのぞきます）';
+    if (settings.mode === 'type') t += ' 国名を入力して答えます。日本語でも英語でも正解です。';
     if (n < settings.count) t += ' 全部で ' + n + '問になります。';
     $('pool-note').textContent = t;
   }
@@ -209,16 +210,24 @@
     $('feedback').hidden = true;
 
     var write = q.kind === 'jwrite';
+    var typing = q.kind === 'type';
     $('writebox').hidden = !write;
-    $('choices').hidden = write;
+    $('typebox').hidden = !typing;
+    $('choices').hidden = write || typing;
+    /* is-compact は漢字を書く欄のための詰めた配置。入力欄のときは
+       国旗を大きく出したいので、ふつうの4択と同じ配置のままにする。 */
     $('stage').classList.toggle('is-compact', write);
 
     /* 下に来るもの（選択肢／書く欄）を先に置いてから地図を描く。
        地図は残りの高さから大きさを決めるので、順番を逆にすると大きく描きすぎる。 */
-    if (write) startWriting(q); else renderChoices(q);
+    if (write) startWriting(q);
+    else if (typing) startTyping();
+    else renderChoices(q);
 
-    if (q.kind === 'flag') {
-      $('prompt').textContent = 'この国旗はどこの国？';
+    if (q.kind === 'flag' || typing) {
+      $('prompt').textContent = typing
+        ? 'この国旗はどこの国？ 名前を入力しよう'
+        : 'この国旗はどこの国？';
       $('stage-map').hidden = true;
       $('stage-flag').hidden = false;
       $('flag').innerHTML = flagHTML(q.answer);
@@ -340,6 +349,26 @@
     state.i++;
     if (state.i >= state.questions.length) { finish(); return; }
     renderQuestion();
+  }
+
+  /* ---------------------------------------------------------------- *
+   * 国名を入力して答える問題
+   * ---------------------------------------------------------------- */
+  function startTyping() {
+    var input = $('type-input');
+    input.value = '';
+    input.disabled = false;
+    /* 端末によっては勝手にキーボードが出ないが、出せるなら出す */
+    try { input.focus({ preventScroll: true }); } catch (e) { input.focus(); }
+  }
+
+  function submitTyped() {
+    if (!state || state.answered || currentQ().kind !== 'type') return;
+    var typed = $('type-input').value.trim();
+    var ok = Quiz.judgeName(currentQ().answer, typed);
+    $('type-input').disabled = true;
+    $('type-input').blur();
+    finishQuestion(ok, ok || !typed ? '' : '書いたのは「' + typed + '」');
   }
 
   /* ---------------------------------------------------------------- *
@@ -514,6 +543,11 @@
     });
 
     $('btn-k-undo').addEventListener('click', function () { if (pad) pad.undo(); });
+    $('btn-type-answer').addEventListener('click', submitTyped);
+    $('type-input').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); submitTyped(); }
+    });
+
     $('btn-k-clear').addEventListener('click', function () { if (pad) pad.clear(); });
     $('btn-k-hint').addEventListener('click', function () { if (pad) pad.hint(); });
     $('btn-k-answer').addEventListener('click', function () {

@@ -40,6 +40,20 @@ const EN_OVERRIDE = {
   TL: 'Timor-Leste', MM: 'Myanmar', NL: 'Netherlands', VA: 'Vatican City',
 };
 
+/* 入力で答えるときに、これも正解とみなす言い方。
+   world-countries の別名（正式名・altSpellings・日本語正式名）に足りない分だけ手で書く。 */
+const JA_ALIAS = {
+  US: ['アメリカ', '米国'],
+  GB: ['英国', 'イギリス'],
+  KR: ['韓国'],
+  KP: ['北朝鮮'],
+  AE: ['UAE'],
+  VA: ['バチカン'],
+  CZ: ['チェコ'],
+  MM: ['ビルマ'],
+  NL: ['ホラント'],
+};
+
 /* ------------------------------------------------------------------ *
  * 2. 難易度（出題範囲）
  *    LEVEL1 … 中学地理で必ず出てくる国
@@ -69,6 +83,23 @@ const level2 = new Set([...LEVEL1, ...LEVEL2_EXTRA]);
 /* ------------------------------------------------------------------ *
  * 3. 地域（大州）
  * ------------------------------------------------------------------ */
+/** 入力の表記ゆれを吸収する。両側を同じ形に均してから比べる。 */
+function normalizeName(s) {
+  if (!s) return '';
+  let t = String(s).normalize('NFKC').toLowerCase();
+  /* ラテン文字のアクセントだけ落とす（Côte d'Ivoire → cote divoire）。
+     NFC に戻すのは、濁点が分解されたまま消えて「ドイツ→トイツ」に
+     ならないようにするため。 */
+  t = t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').normalize('NFC');
+  /* ひらがな → カタカナ（ふらんす でも通るように） */
+  t = t.replace(/[\u3041-\u3096]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 0x60));
+  /* 記号・空白・長音・中黒を落とす */
+  t = t.replace(/[^0-9a-z\u30a1-\u30f6\u4e00-\u9fff]/g, '');
+  /* 先頭の the */
+  t = t.replace(/^the/, '');
+  return t;
+}
+
 function regionOf(c) {
   if (c.region === 'Americas') {
     return c.subregion === 'South America' ? 'south-america' : 'north-america';
@@ -173,6 +204,17 @@ for (const c of countries) {
   const ja = JA_OVERRIDE[c.cca2] ?? c.translations.jpn?.common ?? c.name.common;
   const en = EN_OVERRIDE[c.cca2] ?? c.name.common;
   const level = level1.has(c.cca2) ? 1 : level2.has(c.cca2) ? 2 : 3;
+
+  /* 入力で答えるときに正解とみなす言い方を集める */
+  const spellings = (c.altSpellings || []).filter((s, i) => !(i === 0 && s === c.cca2));
+  const accepted = new Set();
+  for (const n of [ja, en, c.name.common, c.name.official,
+                   c.translations.jpn?.common, c.translations.jpn?.official,
+                   ...spellings, ...(JA_ALIAS[c.cca2] || [])]) {
+    const k = normalizeName(n);
+    if (k) accepted.add(k);
+  }
+
   list.push({
     a2: c.cca2,
     n3: c.ccn3,
@@ -182,6 +224,8 @@ for (const c of countries) {
     level,
     latlng: [round(c.latlng[1]), round(c.latlng[0])],   // [lon, lat]
     hasMap: geomByCcn3.has(c.ccn3),
+    /* 正解とみなす綴り（すべて normalizeName 済み） */
+    ok: [...accepted].sort(),
   });
 }
 list.sort((a, b) => a.a2.localeCompare(b.a2));
