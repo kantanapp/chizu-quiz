@@ -40,10 +40,11 @@
     <div id="set-world">
       <div class="field">
         <h2 class="field-label">出題</h2>
-        <div class="opts" role="radiogroup" aria-label="出題" data-key="mode">
-          <button type="button" role="radio" data-value="map">🗺️ 地図から</button>
-          <button type="button" role="radio" data-value="flag">🚩 国旗から</button>
-          <button type="button" role="radio" data-value="mix">🔀 ミックス</button>
+        <div class="opts opts-wrap opts-2col" role="radiogroup" aria-label="出題" data-key="mode">
+          <button type="button" role="radio" data-value="map">🗺️ 地図から<small>4択</small></button>
+          <button type="button" role="radio" data-value="flag">🚩 国旗から<small>4択</small></button>
+          <button type="button" role="radio" data-value="type">⌨️ 国旗から<small>入力して答える</small></button>
+          <button type="button" role="radio" data-value="mix">🔀 ミックス<small>地図と国旗の4択</small></button>
         </div>
       </div>
       <div class="field">
@@ -169,6 +170,18 @@
         <button type="button" class="chip" id="btn-k-clear">🧹 ぜんぶ消す</button>
         <button type="button" class="chip" id="btn-k-hint">💡 ヒント</button>
         <button type="button" class="chip chip-go" id="btn-k-answer">✓ 答える</button>
+      </div>
+    </div>
+
+    <!-- 国名を入力して答える欄 -->
+    <div class="typebox" id="typebox" hidden>
+      <input type="text" id="type-input" class="type-input"
+             placeholder="国名を入力（日本語 / English）"
+             autocomplete="off" autocapitalize="off" autocorrect="off"
+             spellcheck="false" enterkeyhint="done">
+      <p class="type-help">ひらがなでも、英語でも正解です</p>
+      <div class="k-tools">
+        <button type="button" class="chip chip-go" id="btn-type-answer">✓ 答える</button>
       </div>
     </div>
 

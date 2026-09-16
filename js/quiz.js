@@ -136,6 +136,35 @@
     );
   }
 
+  /**
+   * 入力の表記ゆれを吸収する。tools/build-data.mjs の normalizeName と同じ処理。
+   * 片方だけ直すと答え合わせが合わなくなるので、変えるときは両方そろえること。
+   */
+  function normalizeName(s) {
+    if (!s) return '';
+    var t = String(s).normalize('NFKC').toLowerCase();
+    /* ラテン文字のアクセントだけ落とす。NFC に戻すのは、濁点が分解された
+       まま消えて「ドイツ→トイツ」にならないようにするため。 */
+    t = t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').normalize('NFC');
+    /* ひらがな → カタカナ（ふらんす でも通る） */
+    t = t.replace(/[\u3041-\u3096]/g, function (c) {
+      return String.fromCharCode(c.charCodeAt(0) + 0x60);
+    });
+    /* 記号・空白・長音・中黒を落とす */
+    t = t.replace(/[^0-9a-z\u30a1-\u30f6\u4e00-\u9fff]/g, '');
+    return t.replace(/^the/, '');
+  }
+
+  /**
+   * 入力された国名が合っているか。日本語でも英語でも、正式名でも通る。
+   * @returns {boolean}
+   */
+  function judgeName(country, input) {
+    var key = normalizeName(input);
+    if (!key) return false;
+    return (country.ok || []).indexOf(key) >= 0;
+  }
+
   /** 表記設定にあわせた国名 */
   function label(country, lang) {
     if (lang === 'en') return country.en;
@@ -189,6 +218,7 @@
    */
   function build(opts) {
     var needMap = opts.mode === 'map';
+    if (opts.mode === 'type') needMap = false;
     var base = pool({ region: opts.region, level: opts.level, needMap: needMap });
     if (!base.length) return [];
 
@@ -222,6 +252,8 @@
 
   global.Quiz = {
     REGIONS: REGIONS,
+    judgeName: judgeName,
+    normalizeName: normalizeName,
     JP_REGIONS: JP_REGIONS,
     buildJapan: buildJapan,
     rebuildJapan: rebuildJapan,
