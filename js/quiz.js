@@ -213,12 +213,12 @@
 
   /**
    * 問題を作る。
-   * @param {{mode:'map'|'flag'|'mix', region:string, level:number, count:number}} opts
-   * @returns {Array<{kind:'map'|'flag', answer:object, choices:object[]}>}
+   * @param {{mode:'map'|'flag'|'type'|'mtype'|'mix', region:string, level:number, count:number}} opts
+   * @returns {Array<{kind:'map'|'flag'|'type'|'mtype', answer:object, choices:object[]}>}
    */
   function build(opts) {
-    var needMap = opts.mode === 'map';
-    if (opts.mode === 'type') needMap = false;
+    /* 入力して答える2種のうち、mtype（地図から）だけ地図が要る */
+    var needMap = opts.mode === 'map' || opts.mode === 'mtype';
     var base = pool({ region: opts.region, level: opts.level, needMap: needMap });
     if (!base.length) return [];
 
@@ -230,6 +230,7 @@
       var kind = opts.mode;
       if (kind === 'mix') kind = (answer.hasMap && Math.random() < 0.5) ? 'map' : 'flag';
       if (kind === 'map' && !answer.hasMap) kind = 'flag';
+      if (kind === 'mtype' && !answer.hasMap) kind = 'type';
       var choices = shuffle([answer].concat(distractors(answer, opts, 3)));
       return { kind: kind, answer: answer, choices: choices };
     });
@@ -242,6 +243,7 @@
         ? (answer.hasMap && Math.random() < 0.5 ? 'map' : 'flag')
         : opts.mode;
       if (kind === 'map' && !answer.hasMap) kind = 'flag';
+      if (kind === 'mtype' && !answer.hasMap) kind = 'type';
       return {
         kind: kind,
         answer: answer,

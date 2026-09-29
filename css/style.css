@@ -664,6 +664,11 @@ body {
   .choices button { min-height: 52px; font-size: 14px; }
   .stage { min-height: 110px; }
   .flag { font-size: clamp(80px, 40vh, 200px); }
+  /* 入力して答えるときも、入力欄と答えるボタンを横にならべて、
+     あいた縦を地図・国旗にまわす */
+  .typebox { flex-direction: row; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .typebox .type-input { flex: 1 1 auto; min-height: 48px; font-size: 18px; }
+  .typebox .type-help { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
