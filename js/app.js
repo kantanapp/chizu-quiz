@@ -148,11 +148,11 @@
       $('lv' + lv + '-count').textContent =
         Quiz.pool({ region: settings.region, level: lv, needMap: false }).length + 'か国';
     });
-    var needMap = settings.mode === 'map';
+    var needMap = settings.mode === 'map' || settings.mode === 'mtype';
     var n = Quiz.pool({ region: settings.region, level: settings.level, needMap: needMap }).length;
     var t = regionLabel(settings.region) + '・' + levelLabel(settings.level) + 'で ' + n + 'か国が対象です。';
     if (needMap) t += '（地図に描けない小さな国はのぞきます）';
-    if (settings.mode === 'type') t += ' 国名を入力して答えます。日本語でも英語でも正解です。';
+    if (isTyping(settings.mode)) t += ' 国名を入力して答えます。日本語でも英語でも正解です。';
     if (n < settings.count) t += ' 全部で ' + n + '問になります。';
     $('pool-note').textContent = t;
   }
@@ -197,6 +197,8 @@
 
   function currentQ() { return state.questions[state.i]; }
   var isJpKind = function (kind) { return kind.charAt(0) === 'j'; };
+  /* 入力して答える出題。type は国旗を見て、mtype は地図を見て入力する */
+  var isTyping = function (kind) { return kind === 'type' || kind === 'mtype'; };
 
   function renderQuestion() {
     var q = currentQ();
@@ -210,7 +212,7 @@
     $('feedback').hidden = true;
 
     var write = q.kind === 'jwrite';
-    var typing = q.kind === 'type';
+    var typing = isTyping(q.kind);
     $('writebox').hidden = !write;
     $('typebox').hidden = !typing;
     $('choices').hidden = write || typing;
@@ -224,8 +226,9 @@
     else if (typing) startTyping();
     else renderChoices(q);
 
-    if (q.kind === 'flag' || typing) {
-      $('prompt').textContent = typing
+    /* 国旗を出すのは flag（4択）と type（入力）。mtype は地図を出す。 */
+    if (q.kind === 'flag' || q.kind === 'type') {
+      $('prompt').textContent = q.kind === 'type'
         ? 'この国旗はどこの国？ 名前を入力しよう'
         : 'この国旗はどこの国？';
       $('stage-map').hidden = true;
@@ -234,6 +237,7 @@
     } else {
       $('prompt').textContent =
         q.kind === 'map'    ? 'オレンジ色の国はどこ？' :
+        q.kind === 'mtype'  ? 'オレンジ色の国の名前を入力しよう' :
         q.kind === 'jmap'   ? 'オレンジ色の県はどこ？' :
         q.kind === 'jcap'   ? 'この県の県庁所在地は？' :
                               'オレンジ色の県を漢字で書こう';
@@ -363,7 +367,7 @@
   }
 
   function submitTyped() {
-    if (!state || state.answered || currentQ().kind !== 'type') return;
+    if (!state || state.answered || !isTyping(currentQ().kind)) return;
     var typed = $('type-input').value.trim();
     var ok = Quiz.judgeName(currentQ().answer, typed);
     $('type-input').disabled = true;
