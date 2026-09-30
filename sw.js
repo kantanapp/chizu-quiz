@@ -1,6 +1,6 @@
 /* オフラインでも遊べるようにアプリ本体をキャッシュする。
    ファイルを更新したら CACHE のバージョン番号を上げること。 */
-var CACHE = 'chizu-quiz-v12';
+var CACHE = 'chizu-quiz-v14';
 
 var ASSETS = [
   './',
@@ -25,9 +25,18 @@ var ASSETS = [
 
 self.addEventListener('install', function (e) {
   e.waitUntil(
-    caches.open(CACHE)
-      .then(function (c) { return c.addAll(ASSETS); })
-      .then(function () { return self.skipWaiting(); })
+    caches.open(CACHE).then(function (c) {
+      /* かならずサーバーから取り直す（cache: 'reload'）。ブラウザが持っている
+         古いファイルをそのまま保存すると、新しい HTML と古い JavaScript が
+         混ざったままオフライン用に焼き付いてしまう。
+         1つでも取れなければインストールを失敗させ、前のものを使わせる。 */
+      return Promise.all(ASSETS.map(function (url) {
+        return fetch(url, { cache: 'reload' }).then(function (res) {
+          if (!res || !res.ok) throw new Error('取得できなかった: ' + url);
+          return c.put(url, res);
+        });
+      }));
+    }).then(function () { return self.skipWaiting(); })
   );
 });
 
