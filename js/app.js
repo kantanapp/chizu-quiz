@@ -61,7 +61,20 @@
     } catch (e) { return false; }
   })();
 
+  /* 絵文字が「政府旗（中央に国章が入ったもの）」になってしまう国だけ、
+     教科書と同じ国旗（国章なし）を自前の SVG で描く。
+     ボリビア … 上から 赤・黄・緑 の3色だけ。色と比率（15:22）は
+     2004年のボリビア最高令にもとづく。 */
+  var FLAG_SVG = {
+    BO: '<svg class="flag-svg" viewBox="0 0 22 15" role="img" aria-label="{ALT}">' +
+        '<rect width="22" height="5" y="0" fill="#DA291C"/>' +
+        '<rect width="22" height="5" y="5" fill="#F4E400"/>' +
+        '<rect width="22" height="5" y="10" fill="#007A33"/></svg>'
+  };
+
   function flagHTML(country) {
+    var svg = FLAG_SVG[country.a2];
+    if (svg) return svg.replace('{ALT}', escapeHTML(country.ja) + 'の国旗');
     if (FLAG_EMOJI_OK) return Quiz.flagEmoji(country.a2);
     return '<img src="https://flagcdn.com/w320/' + country.a2.toLowerCase() +
            '.png" alt="' + country.ja + 'の国旗" loading="lazy">';

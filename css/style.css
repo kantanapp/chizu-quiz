@@ -380,13 +380,17 @@ body {
   line-height: 1;
   /* 絵文字が使えない環境では画像に差し替える（app.js が判定） */
 }
-.flag img {
+.flag img, .flag .flag-svg {
   max-width: 78%;
   max-height: 100%;
   border-radius: 8px;
   border: 1px solid var(--line);
   box-shadow: var(--shadow);
 }
+/* 絵文字のかわりに SVG で描く国旗（app.js の FLAG_SVG）。
+   絵文字と同じ大きさに見えるよう、文字の大きさに合わせる。 */
+.flag .flag-svg { width: 78%; height: auto; }
+.flag-svg { display: inline-block; width: 1em; height: auto; vertical-align: -0.15em; border-radius: 2px; }
 
 /* ---------- 漢字を書く欄 ---------- */
 /* 書く問題のとき。書く欄は文字数ぶんの高さで足りるので、
@@ -607,7 +611,8 @@ body {
   width: 40px;
   text-align: center;
 }
-.wrong-list .cflag img, .country-list .cflag img { width: 34px; border-radius: 3px; }
+.wrong-list .cflag img, .country-list .cflag img,
+.wrong-list .cflag .flag-svg, .country-list .cflag .flag-svg { width: 34px; border-radius: 3px; }
 .cname { font-weight: 700; font-size: 15px; }
 .cname .en { display: block; font-size: 12px; font-weight: 500; color: var(--ink-soft); }
 
